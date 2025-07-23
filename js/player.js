@@ -115,6 +115,18 @@ document.addEventListener('passwordVerified', () => {
 
 // 初始化页面内容
 function initializePageContent() {
+    // 订阅校验逻辑
+    if (window.authManager && window.userInterface) {
+        if (!window.authManager.isLoggedIn()) {
+            window.userInterface.showLoginModal();
+            document.getElementById('player-loading').style.display = 'none';
+            return;
+        } else if (!window.authManager.hasValidSubscription()) {
+            window.userInterface.showSubscriptionModal();
+            document.getElementById('player-loading').style.display = 'none';
+            return;
+        }
+    }
 
     // 解析URL参数
     const urlParams = new URLSearchParams(window.location.search);

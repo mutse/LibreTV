@@ -6,6 +6,11 @@ import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
 import dotenv from 'dotenv';
+import { initDatabase, initTables } from './lib/database.js';
+import authRoutes from './routes/auth.js';
+import subscriptionRoutes from './routes/subscription.js';
+import { authenticateToken, optionalAuth, requireSubscription, authErrorHandler } from './middleware/auth.js';
+import { expireOldSubscriptions } from './models/Subscription.js';
 
 dotenv.config();
 
@@ -32,9 +37,13 @@ const log = (...args) => {
 
 const app = express();
 
+// 启用JSON解析
+app.use(express.json({ limit: '10mb' }));
+app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+
 app.use(cors({
   origin: config.corsOrigin,
-  methods: ['GET', 'POST'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -129,8 +138,34 @@ app.use('/proxy', (req, res, next) => {
   next();
 });
 
-// 代理路由
-app.get('/proxy/:encodedUrl', async (req, res) => {
+// API路由
+app.use('/api/auth', authRoutes);
+app.use('/api/subscription', subscriptionRoutes);
+
+// 受保护的代理路由 - 需要订阅才能访问
+app.get('/proxy/:encodedUrl', optionalAuth, async (req, res, next) => {
+  // 如果用户已登录，检查订阅状态
+  if (req.user) {
+    const hasValidSubscription = await req.user.hasValidSubscription();
+    if (!hasValidSubscription) {
+      return res.status(403).json({
+        error: 'SUBSCRIPTION_REQUIRED',
+        message: '需要有效的订阅才能访问视频内容'
+      });
+    }
+  }
+  // 如果没有登录，使用传统的密码验证（向后兼容）
+  else if (config.password && config.password !== '') {
+    // 可以在这里添加传统密码验证逻辑
+    // 或者直接要求登录
+    return res.status(401).json({
+      error: 'LOGIN_REQUIRED',
+      message: '请登录后观看视频'
+    });
+  }
+  
+  next();
+}, async (req, res) => {
   try {
     const encodedUrl = req.params.encodedUrl;
     const targetUrl = decodeURIComponent(encodedUrl);
@@ -196,26 +231,52 @@ app.use(express.static(path.join(__dirname), {
   maxAge: config.cacheMaxAge
 }));
 
-app.use((err, req, res, next) => {
-  console.error('服务器错误:', err);
-  res.status(500).send('服务器内部错误');
-});
+app.use(authErrorHandler);
 
 app.use((req, res) => {
   res.status(404).send('页面未找到');
 });
 
+// 初始化数据库和启动服务器
+async function startServer() {
+  try {
+    console.log('正在初始化数据库...');
+    await initDatabase();
+    await initTables();
+    console.log('数据库初始化完成');
+
+    // 设置定期清理过期订阅的任务
+    setInterval(async () => {
+      try {
+        const expiredCount = await expireOldSubscriptions();
+        if (expiredCount > 0) {
+          console.log(`已处理 ${expiredCount} 个过期订阅`);
+        }
+      } catch (error) {
+        console.error('清理过期订阅失败:', error);
+      }
+    }, 60 * 60 * 1000); // 每小时执行一次
+
+    // 启动服务器
+    app.listen(config.port, () => {
+      console.log(`服务器运行在 http://localhost:${config.port}`);
+      if (config.password !== '') {
+        console.log('用户登录密码已设置');
+      }
+      if (config.adminpassword !== '') {
+        console.log('管理员登录密码已设置');
+      }
+      console.log('用户认证和订阅系统已启用');
+      if (config.debug) {
+        console.log('调试模式已启用');
+        console.log('配置:', { ...config, password: config.password ? '******' : '', adminpassword: config.adminpassword? '******' : '' });
+      }
+    });
+  } catch (error) {
+    console.error('服务器启动失败:', error);
+    process.exit(1);
+  }
+}
+
 // 启动服务器
-app.listen(config.port, () => {
-  console.log(`服务器运行在 http://localhost:${config.port}`);
-  if (config.password !== '') {
-    console.log('用户登录密码已设置');
-  }
-  if (config.adminpassword !== '') {
-    console.log('管理员登录密码已设置');
-  }
-  if (config.debug) {
-    console.log('调试模式已启用');
-    console.log('配置:', { ...config, password: config.password ? '******' : '', adminpassword: config.adminpassword? '******' : '' });
-  }
-});
+startServer();

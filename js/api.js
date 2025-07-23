@@ -550,6 +550,11 @@ async function handleMultipleCustomSearch(searchQuery, customApiUrls) {
     window.fetch = async function(input, init) {
         const requestUrl = typeof input === 'string' ? new URL(input, window.location.origin) : input.url;
         
+        // 如果是认证或订阅相关的API，直接调用原生fetch，不进行拦截
+        if (requestUrl.pathname.startsWith('/api/auth/') || requestUrl.pathname.startsWith('/api/subscription/')) {
+            return originalFetch.call(this, input, init);
+        }
+        
         if (requestUrl.pathname.startsWith('/api/')) {
             if (window.isPasswordProtected && window.isPasswordVerified) {
                 if (window.isPasswordProtected() && !window.isPasswordVerified()) {
