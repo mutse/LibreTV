@@ -89,6 +89,12 @@ class AuthManager {
     };
   }
 
+  // 获取当前用户 token
+  getToken() {
+    // 优先使用内存中的 token，否则从 localStorage 获取
+    return this.token || localStorage.getItem('authToken');
+  }
+
   // 用户注册
   async register(username, email, password, confirmPassword) {
     try {
@@ -148,9 +154,14 @@ class AuthManager {
       console.log('所有数据验证通过，设置token和用户信息...');
       this.token = data.data.token;
       this.user = data.data.user;
+      
+      // 注意：新的注册流程不再自动创建试用订阅
+      // 用户需要在注册后的界面中手动选择激活试用
+      
       localStorage.setItem('authToken', this.token);
       
       console.log('注册成功，用户信息已设置:', this.user);
+      console.log('isNewUser标识:', data.data.isNewUser);
       this.onAuthStateChanged();
       return data;
     } catch (error) {
@@ -240,6 +251,24 @@ class AuthManager {
     this.onAuthStateChanged();
     
     return data;
+  }
+
+  // 加载用户数据（包括订阅信息）
+  async loadUserData() {
+    try {
+      // 首先尝试获取用户资料
+      await this.loadUserProfile();
+    } catch (error) {
+      console.warn('加载用户资料失败，尝试获取订阅信息:', error);
+      
+      // 如果获取用户资料失败，尝试获取订阅信息
+      try {
+        await this.getCurrentSubscription();
+      } catch (subscriptionError) {
+        console.error('加载订阅信息也失败:', subscriptionError);
+        throw error; // 抛出原始错误
+      }
+    }
   }
 
   // 更新用户资料
@@ -400,6 +429,82 @@ class AuthManager {
   // 获取订阅信息
   getSubscription() {
     return this.subscription;
+  }
+
+  // 创建支付宝支付订单
+  async createAlipayPayment(planId, paymentType = 'web') {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('请先登录');
+    }
+
+    const response = await fetch('/api/payment/alipay/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token}`
+      },
+      body: JSON.stringify({ planId, paymentType })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || '创建支付订单失败');
+    }
+  }
+
+  // 查询支付状态
+  async queryPaymentStatus(outTradeNo) {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('请先登录');
+    }
+
+    const response = await fetch(`/api/payment/alipay/query/${outTradeNo}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || '查询支付状态失败');
+    }
+  }
+
+  // 取消支付订单
+  async cancelPayment(outTradeNo) {
+    const token = localStorage.getItem('token');
+    if (!token) {
+      throw new Error('请先登录');
+    }
+
+    const response = await fetch(`/api/payment/alipay/cancel/${outTradeNo}`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || '取消支付失败');
+    }
+  }
+
+  // 检测设备类型
+  isMobileDevice() {
+    return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
   }
 
   // 认证状态改变回调

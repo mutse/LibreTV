@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS user_subscriptions (
     start_date DATETIME NOT NULL,
     end_date DATETIME NOT NULL,
     status TEXT DEFAULT 'active' CHECK (status IN ('active', 'expired', 'cancelled')),
-    payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed')),
+    payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid', 'failed', 'trial')),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users (id),
@@ -57,10 +57,10 @@ CREATE INDEX IF NOT EXISTS idx_user_subscriptions_status ON user_subscriptions(s
 CREATE INDEX IF NOT EXISTS idx_user_sessions_user_id ON user_sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_user_sessions_token_hash ON user_sessions(token_hash);
 
--- 插入默认订阅计划
-INSERT INTO subscription_plans (name, description, duration_months, price) VALUES 
-('月度订阅', '享受全部视频内容，月度订阅', 1, 9.9),
-('年度订阅', '享受全部视频内容，年度订阅更优惠', 12, 99.9);
+-- 插入默认订阅计划（如果不存在）
+INSERT OR IGNORE INTO subscription_plans (name, description, duration_months, price, is_active) VALUES 
+('月度订阅', '享受全部视频内容，月度订阅', 1, 9.9, 1),
+('年度订阅', '享受全部视频内容，年度订阅更优惠', 12, 99.9, 1);
 
 -- 创建触发器以自动更新 updated_at 字段
 CREATE TRIGGER IF NOT EXISTS update_users_timestamp 

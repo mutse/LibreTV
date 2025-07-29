@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>支付成功 - LibreTV</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .success-animation {
+      animation: successPulse 2s ease-in-out infinite;
+    }
+    
+    @keyframes successPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.05); }
+      100% { transform: scale(1); }
+    }
+  </style>
+</head>
+<body class="bg-gray-50 min-h-screen flex items-center justify-center">
+  <div class="max-w-md w-full mx-4">
+    <div class="bg-white rounded-lg shadow-lg p-8 text-center">
+      <!-- 成功图标 -->
+      <div class="success-animation mb-6">
+        <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto">
+          <svg class="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+          </svg>
+        </div>
+      </div>
+      
+      <!-- 标题 -->
+      <h1 class="text-2xl font-bold text-gray-900 mb-4">支付成功！</h1>
+      
+      <!-- 消息 -->
+      <p class="text-gray-600 mb-6">
+        恭喜您！订阅已成功激活，现在可以享受LibreTV的全部功能了。
+      </p>
+      
+      <!-- 订单信息 -->
+      <div id="order-info" class="bg-gray-50 rounded-lg p-4 mb-6 text-left hidden">
+        <h3 class="font-medium text-gray-900 mb-2">订单详情</h3>
+        <div class="text-sm text-gray-600 space-y-1">
+          <div>订单号: <span id="order-no" class="font-mono"></span></div>
+          <div>交易号: <span id="trade-no" class="font-mono"></span></div>
+          <div>支付时间: <span id="pay-time"></span></div>
+        </div>
+      </div>
+      
+      <!-- 按钮 -->
+      <div class="space-y-3">
+        <button onclick="goToHome()" 
+                class="w-full bg-blue-600 text-white py-3 px-4 rounded-lg hover:bg-blue-700 transition-colors">
+          返回首页
+        </button>
+        
+        <button onclick="viewSubscription()" 
+                class="w-full bg-gray-200 text-gray-700 py-2 px-4 rounded-lg hover:bg-gray-300 transition-colors">
+          查看订阅详情
+        </button>
+      </div>
+    </div>
+    
+    <!-- LibreTV Logo -->
+    <div class="text-center mt-8">
+      <h2 class="text-lg font-semibold text-gray-700">LibreTV</h2>
+      <p class="text-sm text-gray-500">免费在线视频搜索与观看平台</p>
+    </div>
+  </div>
+
+  <script>
+    // 从URL参数获取订单信息
+    function getUrlParams() {
+      const params = new URLSearchParams(window.location.search);
+      return {
+        order: params.get('order'),
+        trade: params.get('trade'),
+        time: params.get('time')
+      };
+    }
+    
+    // 显示订单信息
+    function displayOrderInfo() {
+      const params = getUrlParams();
+      
+      if (params.order) {
+        const orderInfo = document.getElementById('order-info');
+        const orderNo = document.getElementById('order-no');
+        const tradeNo = document.getElementById('trade-no');
+        const payTime = document.getElementById('pay-time');
+        
+        orderNo.textContent = params.order;
+        if (params.trade) {
+          tradeNo.textContent = params.trade;
+        }
+        if (params.time) {
+          payTime.textContent = new Date(params.time).toLocaleString();
+        } else {
+          payTime.textContent = new Date().toLocaleString();
+        }
+        
+        orderInfo.classList.remove('hidden');
+      }
+    }
+    
+    // 返回首页
+    function goToHome() {
+      window.location.href = '/';
+    }
+    
+    // 查看订阅详情
+    function viewSubscription() {
+      window.location.href = '/?showSubscription=true';
+    }
+    
+    // 页面加载时显示订单信息
+    document.addEventListener('DOMContentLoaded', displayOrderInfo);
+    
+    // 3秒后自动跳转到首页（可选）
+    setTimeout(() => {
+      const autoRedirect = confirm('3秒后将自动返回首页，是否立即跳转？');
+      if (autoRedirect) {
+        goToHome();
+      }
+    }, 3000);
+  </script>
+</body>
+</html>

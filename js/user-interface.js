@@ -1,7 +1,22 @@
-// 用户界面管理
 class UserInterface {
   constructor() {
+    // 确保 authManager 正确初始化
     this.authManager = window.authManager;
+    if (!this.authManager) {
+      console.error('authManager 未找到，等待初始化...');
+      // 延迟初始化，等待 authManager 加载
+      setTimeout(() => {
+        this.authManager = window.authManager;
+        if (this.authManager) {
+          console.log('authManager 已找到，重新初始化...');
+          this.init();
+        } else {
+          console.error('authManager 仍然未找到！');
+        }
+      }, 100);
+      return;
+    }
+    
     this.currentModal = null;
     this.init();
   }
@@ -257,6 +272,10 @@ class UserInterface {
         }
       }
 
+      // 简化试用卡显示逻辑 - 对于没有订阅的用户直接显示
+      // 让后端来判断具体的资格
+      let showTrialCard = !hasValid;
+
       // 只保留月订阅和年订阅，并去除重复内容
       const filteredPlans = [];
       const seen = new Set();
@@ -283,10 +302,54 @@ class UserInterface {
             </div>
             
             ${hasValid && currentSubscriptionInfo ? `
-              <div class="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-                <h3 class="font-medium text-green-800">当前订阅</h3>
-                <p class="text-green-700">计划: ${currentSubscriptionInfo.planName}</p>
-                <p class="text-green-700">到期时间: ${new Date(currentSubscriptionInfo.endDate).toLocaleDateString()}</p>
+              <div class="mb-6 p-4 ${currentSubscriptionInfo.paymentStatus === 'trial' ? 'bg-purple-50 border-purple-200' : 'bg-green-50 border-green-200'} border rounded-lg">
+                <h3 class="font-medium ${currentSubscriptionInfo.paymentStatus === 'trial' ? 'text-purple-800' : 'text-green-800'}">
+                  ${currentSubscriptionInfo.paymentStatus === 'trial' ? '🎁 试用订阅' : '当前订阅'}
+                </h3>
+                <p class="${currentSubscriptionInfo.paymentStatus === 'trial' ? 'text-purple-700' : 'text-green-700'}">
+                  计划: ${currentSubscriptionInfo.planName}
+                </p>
+                <p class="${currentSubscriptionInfo.paymentStatus === 'trial' ? 'text-purple-700' : 'text-green-700'}">
+                  到期时间: ${new Date(currentSubscriptionInfo.endDate).toLocaleDateString()}
+                </p>
+                ${currentSubscriptionInfo.paymentStatus === 'trial' ? `
+                  <div class="mt-2 p-2 bg-purple-100 rounded text-sm">
+                    <p class="text-purple-800 font-medium">
+                      📅 体验剩余: ${Math.max(0, Math.ceil((new Date(currentSubscriptionInfo.endDate) - new Date()) / (1000 * 60 * 60 * 24)))} 天
+                    </p>
+                    <p class="text-purple-600 text-xs mt-1">试用结束前请选择订阅计划以继续享受服务</p>
+                  </div>
+                ` : ''}
+              </div>
+            ` : ''}
+
+            ${showTrialCard ? `
+              <div class="mb-6 p-6 bg-gradient-to-r from-purple-50 to-pink-50 border-2 border-purple-300 rounded-xl shadow-lg">
+                <div class="text-center mb-4">
+                  <div class="w-12 h-12 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <span class="text-white text-xl">🎁</span>
+                  </div>
+                  <h3 class="text-xl font-bold text-purple-800 mb-2">免费体验3天</h3>
+                  <span class="inline-block px-3 py-1 bg-purple-600 text-white text-xs rounded-full">新用户专享</span>
+                </div>
+                <div class="bg-white rounded-lg p-4 mb-4">
+                  <p class="text-purple-700 text-sm mb-3 text-center">立即享受全部会员功能，无需付费</p>
+                  <div class="grid grid-cols-2 gap-2 text-xs text-purple-600">
+                    <div class="flex items-center"><span class="text-green-500 mr-1">✓</span> 无限制观看</div>
+                    <div class="flex items-center"><span class="text-green-500 mr-1">✓</span> 高清画质</div>
+                    <div class="flex items-center"><span class="text-green-500 mr-1">✓</span> 无广告体验</div>
+                    <div class="flex items-center"><span class="text-green-500 mr-1">✓</span> 随时可取消</div>
+                  </div>
+                </div>
+                <button onclick="userInterface.handleTrialActivation()" 
+                        class="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 font-bold text-lg shadow-md transition-all transform hover:scale-105">
+                  🎉 立即免费体验3天
+                </button>
+                <p class="text-center text-xs text-purple-600 mt-2">每个用户仅限一次，到期前可随时取消</p>
+              </div>
+              
+              <div class="text-center mb-4">
+                <span class="px-4 py-2 bg-gray-100 rounded-full text-gray-500 text-sm">或选择订阅计划</span>
               </div>
             ` : ''}
             
@@ -296,10 +359,32 @@ class UserInterface {
                   <h3 class="text-lg font-semibold mb-2">${plan.name}</h3>
                   <p class="text-gray-600 mb-3">${plan.description}</p>
                   <div class="text-2xl font-bold text-blue-600 mb-4">¥${plan.price}</div>
-                  <button onclick="userInterface.handleSubscribe(${plan.id})" 
-                          class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
-                    ${hasValid ? '续费此计划' : '选择此计划'}
-                  </button>
+                  
+                  ${hasValid ? '' : `
+                    <div class="space-y-2">
+                      <button onclick="userInterface.handleAlipayPayment(${plan.id})" 
+                              class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
+                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <span>支付宝支付</span>
+                      </button>
+                      <button onclick="userInterface.handleSubscribe(${plan.id})" 
+                              class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm">
+                        免费试用（跳过支付）
+                      </button>
+                    </div>
+                  `}
+                  
+                  ${hasValid ? `
+                    <button onclick="userInterface.handleAlipayPayment(${plan.id}, true)" 
+                            class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
+                      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                      </svg>
+                      <span>支付宝续费</span>
+                    </button>
+                  ` : ''}
                 </div>
               `).join('')}
             </div>
@@ -321,6 +406,193 @@ class UserInterface {
     } catch (error) {
       console.error('显示订阅模态框错误:', error);
       this.showError('获取订阅信息失败: ' + error.message);
+    }
+  }
+
+  // 显示新用户体验卡选择模态框
+  showNewUserTrialModal() {
+    const modalHtml = `
+      <div class="bg-black bg-opacity-50 flex items-center justify-center min-h-screen">
+        <div class="bg-white rounded-lg p-8 w-full max-w-lg mx-4">
+          <div class="text-center mb-6">
+            <div class="w-16 h-16 bg-gradient-to-r from-purple-600 to-pink-600 rounded-full flex items-center justify-center mx-auto mb-4">
+              <span class="text-white text-2xl">🎉</span>
+            </div>
+            <h2 class="text-2xl font-bold text-gray-800 mb-2">欢迎加入 LibreTV！</h2>
+            <p class="text-gray-600">感谢您的注册，请选择您的体验方式</p>
+          </div>
+          
+          <div class="space-y-4 mb-6">
+            <!-- 3天免费体验卡 -->
+            <div class="border-2 border-purple-200 rounded-xl p-6 bg-gradient-to-r from-purple-50 to-pink-50 hover:border-purple-400 transition-colors cursor-pointer" onclick="userInterface.activateNewUserTrial()">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center mb-2">
+                    <span class="text-2xl mr-2">🎁</span>
+                    <h3 class="text-lg font-bold text-purple-800">免费体验3天</h3>
+                    <span class="ml-2 px-2 py-1 bg-purple-600 text-white text-xs rounded-full">推荐</span>
+                  </div>
+                  <p class="text-purple-700 text-sm mb-3">立即享受全部会员功能，无需付费</p>
+                  <ul class="text-purple-600 text-sm space-y-1">
+                    <li>✓ 无限制观看所有视频</li>
+                    <li>✓ 高清画质体验</li>
+                    <li>✓ 无广告打扰</li>
+                    <li>✓ 3天后可选择续费或停用</li>
+                  </ul>
+                </div>
+              </div>
+              <button class="w-full mt-4 px-4 py-3 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 font-medium transition-all">
+                立即激活免费体验
+              </button>
+            </div>
+            
+            <!-- 直接订阅选项 -->
+            <div class="border border-gray-200 rounded-xl p-6 hover:border-blue-400 transition-colors cursor-pointer" onclick="userInterface.showSubscriptionModalFromTrial()">
+              <div class="flex items-start justify-between">
+                <div class="flex-1">
+                  <div class="flex items-center mb-2">
+                    <span class="text-2xl mr-2">💳</span>
+                    <h3 class="text-lg font-bold text-gray-800">直接订阅</h3>
+                  </div>
+                  <p class="text-gray-600 text-sm mb-3">跳过体验，直接选择订阅计划</p>
+                  <ul class="text-gray-600 text-sm space-y-1">
+                    <li>✓ 月度订阅 ¥9.9/月</li>
+                    <li>✓ 年度订阅 ¥99.9/年（更优惠）</li>
+                    <li>✓ 支付宝安全支付</li>
+                  </ul>
+                </div>
+              </div>
+              <button class="w-full mt-4 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium transition-colors">
+                查看订阅计划
+              </button>
+            </div>
+            
+            <!-- 稍后决定选项 -->
+            <div class="text-center">
+              <button onclick="userInterface.skipTrialSelection()" 
+                      class="text-gray-500 hover:text-gray-700 text-sm underline">
+                稍后再决定，先浏览看看
+              </button>
+            </div>
+          </div>
+          
+          <div id="trial-selection-error" class="mt-4 text-red-600 text-sm hidden"></div>
+        </div>
+      </div>
+    `;
+    this.showModal(modalHtml);
+  }
+
+  // 激活新用户试用
+  async activateNewUserTrial() {
+    try {
+      console.log('开始激活新用户试用...');
+      
+      // 检查 authManager 是否存在
+      if (!this.authManager) {
+        console.error('authManager 不存在');
+        this.showErrorInModal('trial-selection-error', '认证管理器未初始化，请刷新页面重试');
+        return;
+      }
+      
+      // 检查 getToken 方法是否存在
+      if (typeof this.authManager.getToken !== 'function') {
+        console.error('authManager.getToken 不是一个函数', this.authManager);
+        this.showErrorInModal('trial-selection-error', '认证方法不可用，请刷新页面重试');
+        return;
+      }
+      
+      // 检查token是否存在
+      const token = this.authManager.getToken();
+      console.log('当前用户token:', token ? 'exists' : 'not found');
+      
+      if (!token) {
+        this.showErrorInModal('trial-selection-error', '用户未登录，请重新登录后重试');
+        return;
+      }
+
+      const response = await fetch('/api/subscription/trial', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      console.log('试用激活响应状态:', response.status);
+      
+      const result = await response.json();
+      console.log('试用激活响应数据:', result);
+
+      if (result.success) {
+        // 重新加载用户数据
+        console.log('试用激活成功，重新加载用户数据...');
+        if (this.authManager.loadUserData && typeof this.authManager.loadUserData === 'function') {
+          await this.authManager.loadUserData();
+        }
+        
+        this.closeModal();
+        this.showSuccess('🎉 3天免费体验已激活！现在就开始享受会员服务吧');
+        
+        // 显示内容页面
+        setTimeout(() => {
+          this.showContentArea();
+        }, 1500);
+      } else {
+        console.error('试用激活失败:', result);
+        this.showErrorInModal('trial-selection-error', result.message || '体验卡激活失败');
+      }
+    } catch (error) {
+      console.error('新用户试用激活错误:', error);
+      this.showErrorInModal('trial-selection-error', '体验卡激活失败: ' + error.message);
+    }
+  }
+
+  // 从体验选择界面跳转到订阅界面
+  showSubscriptionModalFromTrial() {
+    this.closeModal();
+    setTimeout(() => {
+      this.showSubscriptionModal();
+    }, 300);
+  }
+
+  // 跳过体验选择
+  skipTrialSelection() {
+    this.closeModal();
+    this.showSuccess('您可以随时在右上角菜单中选择订阅方案');
+    // 不显示内容，保持当前登录但未订阅状态
+  }
+
+  // 处理试用卡激活
+  async handleTrialActivation() {
+    try {
+      const response = await fetch('/api/subscription/trial', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.authManager.getToken()}`,
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const result = await response.json();
+
+      if (result.success) {
+        // 重新加载用户数据
+        await this.authManager.loadUserData();
+        
+        this.closeModal();
+        this.showSuccess(result.message || '3天试用卡激活成功！');
+        
+        // 显示内容页面
+        setTimeout(() => {
+          this.showContentArea();
+        }, 1000);
+      } else {
+        this.showErrorInModal('subscription-error', result.message || '试用卡激活失败');
+      }
+    } catch (error) {
+      console.error('试用卡激活错误:', error);
+      this.showErrorInModal('subscription-error', '试用卡激活失败: ' + error.message);
     }
   }
 
@@ -392,13 +664,20 @@ class UserInterface {
       console.log('注册成功，结果:', result);
       
       this.closeModal();
-      this.showSuccess('注册成功！');
+      this.showSuccess(result.message || '注册成功！');
       
-      // 注册成功后，直接显示订阅页面
-      setTimeout(() => {
-        console.log('显示订阅模态框...');
-        this.showSubscriptionModal();
-      }, 1000);
+      // 检查是否为新用户，显示体验卡选择界面
+      if (result.data && result.data.isNewUser) {
+        setTimeout(() => {
+          console.log('显示新用户体验卡选择界面...');
+          this.showNewUserTrialModal();
+        }, 1000);
+      } else {
+        // 不是新用户，显示普通订阅界面
+        setTimeout(() => {
+          this.showSubscriptionModal();
+        }, 1000);
+      }
     } catch (error) {
       console.error('注册处理错误:', error);
       this.showErrorInModal('register-error', error.message || '注册失败，请重试');
@@ -413,6 +692,7 @@ class UserInterface {
         await this.authManager.renewSubscription(planId);
         this.showSuccess('续费成功！');
       } else {
+        // 跳过支付直接订阅（用于测试）
         await this.authManager.subscribe(planId);
         this.showSuccess('订阅成功！');
       }
@@ -425,6 +705,247 @@ class UserInterface {
     } catch (error) {
       this.showErrorInModal('subscription-error', error.message);
     }
+  }
+
+  // 处理支付宝支付
+  async handleAlipayPayment(planId, isRenewal = false) {
+    try {
+      // 显示支付处理中状态
+      const paymentBtn = event.target;
+      const originalText = paymentBtn.innerHTML;
+      paymentBtn.innerHTML = '<span class="animate-spin">⏳</span> 创建支付订单...';
+      paymentBtn.disabled = true;
+
+      // 检测设备类型，选择支付方式
+      const paymentType = this.authManager.isMobileDevice() ? 'mobile' : 'web';
+      
+      // 创建支付订单
+      const paymentData = await this.authManager.createAlipayPayment(planId, paymentType);
+      
+      // 恢复按钮状态
+      paymentBtn.innerHTML = originalText;
+      paymentBtn.disabled = false;
+
+      // 显示支付确认弹窗
+      this.showPaymentModal(paymentData, isRenewal);
+
+    } catch (error) {
+      // 恢复按钮状态
+      if (event && event.target) {
+        event.target.innerHTML = event.target.getAttribute('data-original-text') || '支付宝支付';
+        event.target.disabled = false;
+      }
+      this.showErrorInModal('subscription-error', error.message);
+    }
+  }
+
+  // 显示支付模态框
+  showPaymentModal(paymentData, isRenewal) {
+    const { paymentUrl, outTradeNo, planInfo } = paymentData;
+    
+    const modalHtml = `
+      <div class="bg-black bg-opacity-50 flex items-center justify-center min-h-screen">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">确认支付</h2>
+            <button onclick="userInterface.closePaymentModal()" class="text-gray-500 hover:text-gray-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="mb-6">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+              <h3 class="font-medium text-blue-800">${planInfo.name}</h3>
+              <p class="text-blue-600 text-sm">${planInfo.description}</p>
+              <p class="text-blue-800 font-bold text-lg mt-2">¥${planInfo.price}</p>
+            </div>
+            
+            <div class="text-sm text-gray-600 mb-4">
+              <p>订单号: ${outTradeNo}</p>
+              <p>支付方式: 支付宝</p>
+            </div>
+          </div>
+          
+          <div class="space-y-3">
+            <button onclick="userInterface.openAlipayPayment('${paymentUrl}', '${outTradeNo}')" 
+                    class="w-full px-4 py-3 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+              </svg>
+              <span>前往支付宝支付</span>
+            </button>
+            
+            <button onclick="userInterface.checkPaymentStatus('${outTradeNo}')" 
+                    class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+              检查支付状态
+            </button>
+            
+            <button onclick="userInterface.cancelPayment('${outTradeNo}')" 
+                    class="w-full px-4 py-2 text-red-600 hover:text-red-800 border border-red-200 rounded-md hover:bg-red-50">
+              取消支付
+            </button>
+          </div>
+          
+          <div id="payment-status" class="mt-4 text-sm hidden"></div>
+          <div id="payment-error" class="mt-4 text-red-600 text-sm hidden"></div>
+        </div>
+      </div>
+    `;
+    
+    this.showModal(modalHtml);
+  }
+
+  // 打开支付宝支付页面
+  openAlipayPayment(paymentUrl, outTradeNo) {
+    // 在新窗口打开支付页面
+    const paymentWindow = window.open(paymentUrl, 'alipay_payment', 'width=800,height=600');
+    
+    // 存储当前支付订单号，用于后续状态检查
+    this.currentPaymentOrder = outTradeNo;
+    
+    // 定期检查支付状态
+    this.startPaymentStatusCheck(outTradeNo);
+    
+    // 监听支付窗口关闭
+    const checkClosed = setInterval(() => {
+      if (paymentWindow.closed) {
+        clearInterval(checkClosed);
+        // 支付窗口关闭后，最后检查一次支付状态
+        setTimeout(() => {
+          this.checkPaymentStatus(outTradeNo);
+        }, 2000);
+      }
+    }, 1000);
+  }
+
+  // 开始支付状态检查
+  startPaymentStatusCheck(outTradeNo) {
+    // 清除之前的定时器
+    if (this.paymentStatusTimer) {
+      clearInterval(this.paymentStatusTimer);
+    }
+    
+    // 每5秒检查一次支付状态，最多检查24次（2分钟）
+    let checkCount = 0;
+    const maxChecks = 24;
+    
+    this.paymentStatusTimer = setInterval(async () => {
+      checkCount++;
+      
+      try {
+        const result = await this.authManager.queryPaymentStatus(outTradeNo);
+        
+        if (result.success && (result.tradeStatus === 'TRADE_SUCCESS' || result.tradeStatus === 'TRADE_FINISHED')) {
+          // 支付成功
+          clearInterval(this.paymentStatusTimer);
+          this.handlePaymentSuccess(outTradeNo);
+          return;
+        }
+      } catch (error) {
+        console.warn('检查支付状态失败:', error);
+      }
+      
+      // 超过最大检查次数，停止检查
+      if (checkCount >= maxChecks) {
+        clearInterval(this.paymentStatusTimer);
+        this.updatePaymentStatus('支付状态检查超时，请手动检查', 'warning');
+      }
+    }, 5000);
+  }
+
+  // 检查支付状态
+  async checkPaymentStatus(outTradeNo) {
+    try {
+      this.updatePaymentStatus('正在查询支付状态...', 'info');
+      
+      const result = await this.authManager.queryPaymentStatus(outTradeNo);
+      
+      if (result.success) {
+        if (result.tradeStatus === 'TRADE_SUCCESS' || result.tradeStatus === 'TRADE_FINISHED') {
+          this.handlePaymentSuccess(outTradeNo);
+        } else if (result.tradeStatus === 'WAIT_BUYER_PAY') {
+          this.updatePaymentStatus('等待支付中...', 'warning');
+        } else {
+          this.updatePaymentStatus(`支付状态: ${result.tradeStatus}`, 'info');
+        }
+      } else {
+        this.updatePaymentStatus('支付订单未找到或已取消', 'error');
+      }
+    } catch (error) {
+      this.updatePaymentStatus('查询支付状态失败: ' + error.message, 'error');
+    }
+  }
+
+  // 处理支付成功
+  async handlePaymentSuccess(outTradeNo) {
+    try {
+      // 清除定时器
+      if (this.paymentStatusTimer) {
+        clearInterval(this.paymentStatusTimer);
+      }
+      
+      this.updatePaymentStatus('支付成功！正在激活订阅...', 'success');
+      
+      // 重新获取用户订阅信息
+      await this.authManager.loadUserData();
+      
+      // 关闭支付模态框
+      setTimeout(() => {
+        this.closeModal();
+        this.showSuccess('支付成功！订阅已激活');
+        
+        // 显示内容页面
+        setTimeout(() => {
+          this.showContentArea();
+        }, 1000);
+      }, 2000);
+      
+    } catch (error) {
+      this.updatePaymentStatus('激活订阅失败: ' + error.message, 'error');
+    }
+  }
+
+  // 取消支付
+  async cancelPayment(outTradeNo) {
+    if (confirm('确定要取消支付吗？')) {
+      try {
+        // 清除定时器
+        if (this.paymentStatusTimer) {
+          clearInterval(this.paymentStatusTimer);
+        }
+        
+        await this.authManager.cancelPayment(outTradeNo);
+        this.closeModal();
+        this.showSuccess('支付已取消');
+      } catch (error) {
+        this.updatePaymentStatus('取消支付失败: ' + error.message, 'error');
+      }
+    }
+  }
+
+  // 更新支付状态显示
+  updatePaymentStatus(message, type) {
+    const statusEl = document.getElementById('payment-status');
+    if (statusEl) {
+      statusEl.textContent = message;
+      statusEl.className = `mt-4 text-sm ${
+        type === 'success' ? 'text-green-600' : 
+        type === 'error' ? 'text-red-600' : 
+        type === 'warning' ? 'text-yellow-600' : 'text-blue-600'
+      }`;
+      statusEl.classList.remove('hidden');
+    }
+  }
+
+  // 关闭支付模态框
+  closePaymentModal() {
+    // 清除定时器
+    if (this.paymentStatusTimer) {
+      clearInterval(this.paymentStatusTimer);
+    }
+    this.closeModal();
   }
 
   // 处理取消订阅
@@ -513,8 +1034,8 @@ class UserInterface {
       }
     });
 
-    // 确保用户菜单正确显示
-    this.updateUI();
+    // 删除递归调用，防止栈溢出
+    // this.updateUI();
   }
 
   // 隐藏内容区域（显示欢迎界面）

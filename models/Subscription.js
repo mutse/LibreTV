@@ -14,20 +14,45 @@ export class Subscription {
   }
 
   // 创建新订阅
-  static async create({ userId, planId, durationMonths }) {
+  static async create({ userId, planId, durationMonths, isTrial = false }) {
+    console.log('Subscription.create - 参数:', { userId, planId, durationMonths, isTrial });
+    
     const startDate = new Date();
     const endDate = new Date();
-    endDate.setMonth(endDate.getMonth() + durationMonths);
+    
+    if (isTrial) {
+      endDate.setDate(endDate.getDate() + 3); // 3天试用
+      console.log('Subscription.create - 试用模式，设置3天期限');
+    } else {
+      endDate.setMonth(endDate.getMonth() + durationMonths);
+      console.log('Subscription.create - 正常模式，设置月数:', durationMonths);
+    }
+
+    const paymentStatus = isTrial ? 'trial' : 'paid';
+    
+    console.log('Subscription.create - 订阅详情:', {
+      userId,
+      planId, 
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
+      paymentStatus
+    });
 
     const result = await executeUpdate(
       `INSERT INTO user_subscriptions (user_id, plan_id, start_date, end_date, status, payment_status) 
-       VALUES (?, ?, ?, ?, 'active', 'paid')`,
-      [userId, planId, startDate.toISOString(), endDate.toISOString()]
+       VALUES (?, ?, ?, ?, 'active', ?)`,
+      [userId, planId, startDate.toISOString(), endDate.toISOString(), paymentStatus]
     );
+    
+    console.log('Subscription.create - 数据库插入结果:', result);
 
     if (result.success) {
-      return await Subscription.findById(result.meta.last_row_id);
+      const newSubscription = await Subscription.findById(result.meta.last_row_id);
+      console.log('Subscription.create - 创建的订阅:', newSubscription ? {id: newSubscription.id, endDate: newSubscription.endDate} : 'null');
+      return newSubscription;
     }
+    
+    console.log('Subscription.create - 错误: 订阅创建失败');
     throw new Error('Failed to create subscription');
   }
 
@@ -68,11 +93,70 @@ export class Subscription {
     return results.results || [];
   }
 
+  // 检查用户是否已使用过试用
+  static async hasUserUsedTrial(userId) {
+    const trialSubscription = await executeQueryFirst(
+      `SELECT id FROM user_subscriptions 
+       WHERE user_id = ? AND payment_status = 'trial'`,
+      [userId]
+    );
+    
+    return !!trialSubscription;
+  }
+
+  // 创建3天试用订阅
+  static async createTrialSubscription(userId) {
+    console.log('createTrialSubscription - 开始为用户创建试用订阅:', userId);
+    
+    // 首先检查用户是否已使用过试用
+    const hasUsedTrial = await Subscription.hasUserUsedTrial(userId);
+    console.log('createTrialSubscription - 用户是否已使用过试用:', hasUsedTrial);
+    
+    if (hasUsedTrial) {
+      console.log('createTrialSubscription - 错误: 用户已使用过试用');
+      throw new Error('User has already used trial subscription');
+    }
+
+    // 检查是否有活跃订阅
+    const existingSubscription = await Subscription.findActiveByUserId(userId);
+    console.log('createTrialSubscription - 现有活跃订阅:', existingSubscription ? {id: existingSubscription.id, status: existingSubscription.status} : 'null');
+    
+    if (existingSubscription && existingSubscription.isValid()) {
+      console.log('createTrialSubscription - 错误: 用户已有活跃订阅');
+      throw new Error('User already has an active subscription');
+    }
+
+    // 获取默认计划（月度订阅）用于试用
+    console.log('createTrialSubscription - 查询默认订阅计划...');
+    const defaultPlan = await executeQueryFirst(
+      'SELECT * FROM subscription_plans WHERE duration_months = 1 ORDER BY price ASC LIMIT 1'
+    );
+    
+    console.log('createTrialSubscription - 查询到的默认计划:', defaultPlan);
+
+    if (!defaultPlan) {
+      console.log('createTrialSubscription - 错误: 没有可用的订阅计划');
+      throw new Error('No available plan for trial');
+    }
+
+    console.log('createTrialSubscription - 开始创建试用订阅...');
+    const result = await Subscription.create({
+      userId,
+      planId: defaultPlan.id,
+      durationMonths: 1,
+      isTrial: true
+    });
+    
+    console.log('createTrialSubscription - 试用订阅创建完成:', result ? {id: result.id, endDate: result.endDate} : 'null');
+    return result;
+  }
+
   // 检查订阅是否有效
   isValid() {
     const now = new Date();
     const endDate = new Date(this.endDate);
-    return this.status === 'active' && endDate > now && this.paymentStatus === 'paid';
+    return this.status === 'active' && endDate > now && 
+           (this.paymentStatus === 'paid' || this.paymentStatus === 'trial');
   }
 
   // 检查订阅是否即将过期（7天内）

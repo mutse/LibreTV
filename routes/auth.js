@@ -1,5 +1,6 @@
 import express from 'express';
 import User from '../models/User.js';
+import { Subscription } from '../models/Subscription.js';
 import { validateEmail, validateUsername, validatePassword } from '../lib/auth.js';
 
 const router = express.Router();
@@ -77,10 +78,11 @@ router.post('/register', async (req, res) => {
 
     res.status(201).json({
       success: true,
-      message: '注册成功',
+      message: '注册成功！请选择您的体验方式',
       data: {
         user: newUser.toSafeObject(),
-        token
+        token,
+        isNewUser: true // 标记为新用户
       }
     });
 

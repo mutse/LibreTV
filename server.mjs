@@ -1,3 +1,4 @@
+import dotenv from 'dotenv';
 import path from 'path';
 import express from 'express';
 import axios from 'axios';
@@ -5,10 +6,11 @@ import cors from 'cors';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
 import crypto from 'crypto';
-import dotenv from 'dotenv';
 import { initDatabase, initTables } from './lib/database.js';
+import { ensureSubscriptionPlans } from './ensure-plans.js';
 import authRoutes from './routes/auth.js';
 import subscriptionRoutes from './routes/subscription.js';
+import paymentRoutes from './routes/payment.js';
 import { authenticateToken, optionalAuth, requireSubscription, authErrorHandler } from './middleware/auth.js';
 import { expireOldSubscriptions } from './models/Subscription.js';
 
@@ -141,6 +143,7 @@ app.use('/proxy', (req, res, next) => {
 // API路由
 app.use('/api/auth', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
+app.use('/api/payment', paymentRoutes);
 
 // 受保护的代理路由 - 需要订阅才能访问
 app.get('/proxy/:encodedUrl', optionalAuth, async (req, res, next) => {
@@ -227,6 +230,15 @@ app.get('/proxy/:encodedUrl', optionalAuth, async (req, res, next) => {
   }
 });
 
+// 支付相关页面路由
+app.get('/payment/success', (req, res) => {
+  res.sendFile(path.join(__dirname, 'payment-success.html'));
+});
+
+app.get('/payment/failed', (req, res) => {
+  res.sendFile(path.join(__dirname, 'payment-failed.html'));
+});
+
 app.use(express.static(path.join(__dirname), {
   maxAge: config.cacheMaxAge
 }));
@@ -244,6 +256,11 @@ async function startServer() {
     await initDatabase();
     await initTables();
     console.log('数据库初始化完成');
+    
+    // 确保订阅计划数据存在
+    console.log('确保订阅计划数据...');
+    await ensureSubscriptionPlans();
+    console.log('订阅计划数据确保完成');
 
     // 设置定期清理过期订阅的任务
     setInterval(async () => {
