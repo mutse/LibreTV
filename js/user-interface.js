@@ -257,6 +257,14 @@ class UserInterface {
       const plans = await this.authManager.getSubscriptionPlans();
       console.log('订阅计划:', plans);
       
+      // 获取支付配置状态
+      const paymentConfig = await this.authManager.getPaymentConfigStatus();
+      console.log('支付配置:', paymentConfig);
+      
+      // 检查是否有可用的支付方式
+      const hasPaymentMethods = paymentConfig.supportedMethods && paymentConfig.supportedMethods.length > 0;
+      console.log('可用支付方式:', paymentConfig.supportedMethods);
+      
       // 检查用户是否有有效订阅
       const hasValid = this.authManager.hasValidSubscription();
       console.log('用户是否有有效订阅:', hasValid);
@@ -318,7 +326,31 @@ class UserInterface {
                       📅 体验剩余: ${Math.max(0, Math.ceil((new Date(currentSubscriptionInfo.endDate) - new Date()) / (1000 * 60 * 60 * 24)))} 天
                     </p>
                     <p class="text-purple-600 text-xs mt-1">试用结束前请选择订阅计划以继续享受服务</p>
+                    <button onclick="userInterface.showSubscriptionModal()" 
+                            class="mt-2 w-full px-3 py-1.5 bg-purple-600 text-white text-xs rounded hover:bg-purple-700 transition-colors">
+                      立即订阅
+                    </button>
                   </div>
+                ` : ''}
+              </div>
+            ` : ''}
+
+            ${!hasPaymentMethods ? `
+              <div class="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <div class="flex items-center mb-2">
+                  <svg class="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"></path>
+                  </svg>
+                  <h3 class="font-medium text-yellow-800">支付服务暂不可用</h3>
+                </div>
+                <p class="text-yellow-700 text-sm">
+                  ${paymentConfig.message || '支付服务正在维护中，请稍后再试'}
+                </p>
+                ${paymentConfig.alipay && paymentConfig.alipay.error ? `
+                  <p class="text-yellow-600 text-xs mt-1">支付宝: ${paymentConfig.alipay.error}</p>
+                ` : ''}
+                ${paymentConfig.paypal && paymentConfig.paypal.error ? `
+                  <p class="text-yellow-600 text-xs mt-1">PayPal: ${paymentConfig.paypal.error}</p>
                 ` : ''}
               </div>
             ` : ''}
@@ -362,39 +394,82 @@ class UserInterface {
                   
                   ${hasValid ? '' : `
                     <div class="space-y-2">
-                      <button onclick="userInterface.handleAlipayPayment(${plan.id})" 
-                              class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
-                        <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                        </svg>
-                        <span>支付宝支付</span>
-                      </button>
-                      <button onclick="userInterface.handleSubscribe(${plan.id})" 
-                              class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300 text-sm">
-                        免费试用（跳过支付）
-                      </button>
+                      ${hasPaymentMethods ? `
+                        ${paymentConfig.supportedMethods.includes('alipay') ? `
+                          <button onclick="userInterface.handleAlipayPayment(${plan.id})" 
+                                  class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                            <span>支付宝支付</span>
+                          </button>
+                        ` : ''}
+                        ${paymentConfig.supportedMethods.includes('paypal') || true ? `
+                          <button onclick="console.log('PayPal按钮点击'); userInterface.handlePaypalPayment(${plan.id})" 
+                                  class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a9.159 9.159 0 0 1-.444 1.823c-1.048 4.455-4.538 6.083-8.696 6.083H9.83c-.524 0-.968.382-1.05.9L7.598 21.9c-.054.26.159.5.427.5h4.19c.524 0 .968-.382 1.05-.9l.444-2.817c.082-.518.526-.9 1.05-.9h1.49c3.965 0 7.07-1.61 7.98-6.267.378-1.935.17-3.55-.607-4.599z"/>
+                            </svg>
+                            <span>PayPal支付（测试）</span>
+                          </button>
+                        ` : ''}
+                        <button onclick="userInterface.showPaymentSelectionModal(${plan.id})" 
+                                class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 text-sm">
+                          订阅支付
+                        </button>
+                      ` : `
+                        <div class="text-center p-4 bg-gray-50 rounded-md">
+                          <p class="text-gray-500 text-sm">支付服务暂不可用</p>
+                          <p class="text-gray-400 text-xs mt-1">请联系管理员配置支付服务</p>
+                        </div>
+                      `}
                     </div>
                   `}
                   
                   ${hasValid ? `
-                    <button onclick="userInterface.handleAlipayPayment(${plan.id}, true)" 
-                            class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
-                      <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                      </svg>
-                      <span>支付宝续费</span>
-                    </button>
+                    <div class="space-y-2">
+                      ${hasPaymentMethods ? `
+                        ${paymentConfig.supportedMethods.includes('alipay') ? `
+                          <button onclick="userInterface.handleAlipayPayment(${plan.id}, true)" 
+                                  class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                            </svg>
+                            <span>支付宝续费</span>
+                          </button>
+                        ` : ''}
+                        ${paymentConfig.supportedMethods.includes('paypal') || true ? `
+                          <button onclick="console.log('PayPal续费按钮点击'); userInterface.handlePaypalPayment(${plan.id}, true)" 
+                                  class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
+                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                              <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a9.159 9.159 0 0 1-.444 1.823c-1.048 4.455-4.538 6.083-8.696 6.083H9.83c-.524 0-.968.382-1.05.9L7.598 21.9c-.054.26.159.5.427.5h4.19c.524 0 .968-.382 1.05-.9l.444-2.817c.082-.518.526-.9 1.05-.9h1.49c3.965 0 7.07-1.61 7.98-6.267.378-1.935.17-3.55-.607-4.599z"/>
+                            </svg>
+                            <span>PayPal续费（测试）</span>
+                          </button>
+                        ` : ''}
+                      ` : `
+                        <div class="text-center p-2 bg-gray-50 rounded-md">
+                          <p class="text-gray-500 text-xs">支付服务暂不可用</p>
+                        </div>
+                      `}
+                    </div>
                   ` : ''}
                 </div>
               `).join('')}
             </div>
             
             ${hasValid ? `
-              <div class="border-t pt-4">
+              <div class="border-t pt-4 flex justify-between items-center">
                 <button onclick="userInterface.handleCancelSubscription()" 
                         class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700">
                   取消订阅
                 </button>
+                ${currentSubscriptionInfo && currentSubscriptionInfo.paymentStatus === 'trial' ? `
+                  <button onclick="userInterface.showSubscriptionModal()" 
+                          class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700">
+                    立即订阅
+                  </button>
+                ` : ''}
               </div>
             ` : ''}
             
@@ -556,6 +631,80 @@ class UserInterface {
     }, 300);
   }
 
+  // 显示支付选择模态框
+  async showPaymentSelectionModal(planId) {
+    try {
+      // 获取订阅计划信息
+      const response = await fetch('/api/subscription/plans');
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.message || '获取订阅计划失败');
+      }
+      
+      const plan = result.data.plans.find(p => p.id === planId);
+      if (!plan) {
+        throw new Error('订阅计划不存在');
+      }
+
+      const modalHtml = `
+        <div class="bg-black bg-opacity-50 flex items-center justify-center min-h-screen">
+          <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+            <div class="flex justify-between items-center mb-4">
+              <h2 class="text-xl font-semibold">选择支付方式</h2>
+              <button onclick="userInterface.closeModal()" class="text-gray-500 hover:text-gray-700">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+            
+            <div class="mb-6">
+              <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                <h3 class="font-medium text-blue-800">${plan.name}</h3>
+                <p class="text-blue-600 text-sm">${plan.description}</p>
+                <div class="flex justify-between items-center mt-2">
+                  <span class="text-blue-700 font-semibold">价格: ¥${plan.price}</span>
+                  <span class="text-xs text-blue-600">新订阅</span>
+                </div>
+              </div>
+            </div>
+            
+            <div class="space-y-3">
+              <button onclick="userInterface.handleAlipayPayment(${planId})" 
+                      class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                </svg>
+                <span>支付宝支付</span>
+              </button>
+              
+              <button onclick="userInterface.handlePaypalPayment(${planId})" 
+                      class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
+                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a9.159 9.159 0 0 1-.444 1.823c-1.048 4.455-4.538 6.083-8.696 6.083H9.83c-.524 0-.968.382-1.05.9L7.598 21.9c-.054.26.159.5.427.5h4.19c.524 0 .968-.382 1.05-.9l.444-2.817c.082-.518.526-.9 1.05-.9h1.49c3.965 0 7.07-1.61 7.98-6.267.378-1.935.17-3.55-.607-4.599z"/>
+                </svg>
+                <span>PayPal支付</span>
+              </button>
+              
+              <button onclick="userInterface.closeModal()" 
+                      class="w-full px-4 py-2 text-gray-600 hover:text-gray-800 border border-gray-200 rounded-md hover:bg-gray-50">
+                取消
+              </button>
+            </div>
+            
+            <div id="payment-selection-error" class="mt-4 text-red-600 text-sm hidden"></div>
+          </div>
+        </div>
+      `;
+      
+      this.showModal(modalHtml);
+    } catch (error) {
+      console.error('显示支付选择模态框错误:', error);
+      this.showError('获取订阅信息失败: ' + error.message);
+    }
+  }
+
   // 跳过体验选择
   skipTrialSelection() {
     this.closeModal();
@@ -687,13 +836,25 @@ class UserInterface {
   // 处理订阅
   async handleSubscribe(planId) {
     try {
+      console.log('开始处理订阅，planId:', planId);
+      
+      // 检查用户是否已登录
+      if (!this.authManager.isLoggedIn()) {
+        this.showErrorInModal('subscription-error', '请先登录');
+        return;
+      }
+      
       const hasValid = this.authManager.hasValidSubscription();
+      console.log('用户是否有有效订阅:', hasValid);
+      
       if (hasValid) {
+        console.log('用户已有订阅，执行续费');
         await this.authManager.renewSubscription(planId);
         this.showSuccess('续费成功！');
       } else {
+        console.log('用户无订阅，执行新订阅，跳过支付');
         // 跳过支付直接订阅（用于测试）
-        await this.authManager.subscribe(planId);
+        await this.authManager.subscribe(planId, true);
         this.showSuccess('订阅成功！');
       }
       this.closeModal();
@@ -703,6 +864,7 @@ class UserInterface {
         this.showContentArea();
       }, 1000);
     } catch (error) {
+      console.error('订阅失败:', error);
       this.showErrorInModal('subscription-error', error.message);
     }
   }
@@ -736,6 +898,53 @@ class UserInterface {
         event.target.disabled = false;
       }
       this.showErrorInModal('subscription-error', error.message);
+    }
+  }
+
+  // 处理PayPal支付
+  async handlePaypalPayment(planId, isRenewal = false) {
+    console.log('PayPal支付按钮被点击，参数:', { planId, isRenewal });
+    
+    try {
+      // 检查用户是否已登录
+      if (!this.authManager.isLoggedIn()) {
+        console.error('用户未登录');
+        this.showErrorInModal('subscription-error', '请先登录后再进行支付');
+        return;
+      }
+      
+      // 显示支付处理中状态
+      const paymentBtn = event.target;
+      const originalText = paymentBtn.innerHTML;
+      console.log('原始按钮文本:', originalText);
+      
+      paymentBtn.innerHTML = '<span class="animate-spin">⏳</span> 创建PayPal支付订单...';
+      paymentBtn.disabled = true;
+      
+      console.log('开始创建PayPal支付订单...');
+      
+      // 创建PayPal支付订单
+      const paymentData = await this.authManager.createPaypalPayment(planId, 'USD');
+      console.log('PayPal支付订单创建成功:', paymentData);
+      
+      // 恢复按钮状态
+      paymentBtn.innerHTML = originalText;
+      paymentBtn.disabled = false;
+      
+      // 显示PayPal支付确认弹窗
+      this.showPaypalPaymentModal(paymentData, isRenewal);
+      
+    } catch (error) {
+      console.error('PayPal支付处理失败:', error);
+      
+      // 恢复按钮状态
+      if (event && event.target) {
+        event.target.innerHTML = event.target.getAttribute('data-original-text') || 'PayPal支付';
+        event.target.disabled = false;
+      }
+      
+      // 显示错误信息
+      this.showErrorInModal('subscription-error', 'PayPal支付失败: ' + error.message);
     }
   }
 
@@ -818,6 +1027,128 @@ class UserInterface {
         }, 2000);
       }
     }, 1000);
+  }
+
+  // 显示PayPal支付模态框
+  showPaypalPaymentModal(paymentData, isRenewal) {
+    const { paymentUrl, paymentId, outTradeNo, planInfo } = paymentData;
+    
+    const modalHtml = `
+      <div class="bg-black bg-opacity-50 flex items-center justify-center min-h-screen">
+        <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+          <div class="flex justify-between items-center mb-4">
+            <h2 class="text-xl font-semibold">确认PayPal支付</h2>
+            <button onclick="userInterface.closePaymentModal()" class="text-gray-500 hover:text-gray-700">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
+          </div>
+          
+          <div class="mb-6">
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 mb-4">
+              <h3 class="font-medium text-yellow-800">${planInfo.name}</h3>
+              <p class="text-yellow-600 text-sm">${planInfo.description}</p>
+              <div class="flex justify-between items-center mt-2">
+                <span class="text-yellow-700 font-semibold">价格: ¥${planInfo.price} (≈ $${planInfo.priceUSD})</span>
+                <span class="text-xs text-yellow-600">${isRenewal ? '续费' : '新订阅'}</span>
+              </div>
+            </div>
+            
+            <div class="text-sm text-gray-600 mb-4">
+              <p>订单号: ${outTradeNo}</p>
+              <p>支付方式: PayPal</p>
+              <p>付款ID: ${paymentId}</p>
+            </div>
+          </div>
+          
+          <div class="space-y-3">
+            <button onclick="userInterface.openPaypalPayment('${paymentUrl}', '${paymentId}')" 
+                    class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M7.076 21.337H2.47a.641.641 0 0 1-.633-.74L4.944.901C5.026.382 5.474 0 5.998 0h7.46c2.57 0 4.578.543 5.69 1.81 1.01 1.15 1.304 2.42 1.012 4.287-.023.143-.047.288-.077.437-.983 5.05-4.349 6.797-8.647 6.797h-2.19c-.524 0-.968.382-1.05.9l-1.12 7.106zm14.146-14.42a9.159 9.159 0 0 1-.444 1.823c-1.048 4.455-4.538 6.083-8.696 6.083H9.83c-.524 0-.968.382-1.05.9L7.598 21.9c-.054.26.159.5.427.5h4.19c.524 0 .968-.382 1.05-.9l.444-2.817c.082-.518.526-.9 1.05-.9h1.49c3.965 0 7.07-1.61 7.98-6.267.378-1.935.17-3.55-.607-4.599z"/>
+              </svg>
+              <span>前往PayPal支付</span>
+            </button>
+            
+            <button onclick="userInterface.checkPaypalPaymentStatus('${paymentId}')" 
+                    class="w-full px-4 py-2 bg-gray-200 text-gray-700 rounded-md hover:bg-gray-300">
+              检查PayPal支付状态
+            </button>
+            
+            <button onclick="userInterface.closePaymentModal()" 
+                    class="w-full px-4 py-2 text-red-600 hover:text-red-800 border border-red-200 rounded-md hover:bg-red-50">
+              取消支付
+            </button>
+          </div>
+          
+          <div id="payment-status" class="mt-4 text-sm hidden"></div>
+          <div id="payment-error" class="mt-4 text-red-600 text-sm hidden"></div>
+        </div>
+      </div>
+    `;
+    
+    this.showModal(modalHtml);
+  }
+
+  // 打开PayPal支付页面
+  openPaypalPayment(paymentUrl, paymentId) {
+    // 在当前窗口打开PayPal支付页面
+    window.location.href = paymentUrl;
+    
+    // 存储当前支付ID，用于后续状态检查
+    this.currentPaypalPaymentId = paymentId;
+  }
+
+  // 检查PayPal支付状态
+  async checkPaypalPaymentStatus(paymentId) {
+    try {
+      const statusElement = document.getElementById('payment-status');
+      const errorElement = document.getElementById('payment-error');
+      
+      if (statusElement) {
+        statusElement.className = 'mt-4 text-sm text-blue-600';
+        statusElement.textContent = '正在查询PayPal支付状态...';
+        statusElement.classList.remove('hidden');
+      }
+      
+      if (errorElement) {
+        errorElement.classList.add('hidden');
+      }
+
+      const status = await this.authManager.queryPaypalPaymentStatus(paymentId);
+      
+      if (statusElement) {
+        if (status.state === 'approved' || status.state === 'completed') {
+          statusElement.className = 'mt-4 text-sm text-green-600';
+          statusElement.textContent = '✅ PayPal支付成功！订阅已激活';
+          
+          // 刷新用户数据和UI
+          setTimeout(() => {
+            this.authManager.loadUserData();
+            this.updateUI();
+            this.closeModal();
+          }, 2000);
+        } else if (status.state === 'created') {
+          statusElement.className = 'mt-4 text-sm text-yellow-600';
+          statusElement.textContent = '⏳ PayPal支付待确认，请完成支付';
+        } else {
+          statusElement.className = 'mt-4 text-sm text-gray-600';
+          statusElement.textContent = `PayPal支付状态: ${status.state}`;
+        }
+      }
+    } catch (error) {
+      const errorElement = document.getElementById('payment-error');
+      if (errorElement) {
+        errorElement.textContent = error.message;
+        errorElement.classList.remove('hidden');
+      }
+      
+      const statusElement = document.getElementById('payment-status');
+      if (statusElement) {
+        statusElement.classList.add('hidden');
+      }
+    }
   }
 
   // 开始支付状态检查

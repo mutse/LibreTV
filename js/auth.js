@@ -321,14 +321,19 @@ class AuthManager {
   }
 
   // 订阅
-  async subscribe(planId) {
+  async subscribe(planId, skipPayment = false) {
+    console.log('AuthManager.subscribe 调用，参数:', { planId, skipPayment });
+    
     const response = await fetch(`${this.baseUrl}/subscription/subscribe`, {
       method: 'POST',
       headers: this.getHeaders(),
-      body: JSON.stringify({ planId })
+      body: JSON.stringify({ planId, skipPayment })
     });
 
+    console.log('订阅API响应状态:', response.status, response.statusText);
+    
     const data = await response.json();
+    console.log('订阅API响应数据:', data);
 
     if (!response.ok) {
       throw new Error(data.message || '订阅失败');
@@ -414,6 +419,26 @@ class AuthManager {
     return !!this.token && !!this.user;
   }
 
+  // 确保用户已登录并且数据已加载
+  async ensureLoggedIn() {
+    if (!this.token) {
+      throw new Error('请先登录');
+    }
+    
+    // If user data isn't loaded yet, wait for it
+    if (!this.user) {
+      try {
+        await this.loadUserProfile();
+      } catch (error) {
+        // If loading profile fails, token might be invalid
+        this.logout();
+        throw new Error('登录状态已过期，请重新登录');
+      }
+    }
+    
+    return true;
+  }
+
   // 检查是否有有效订阅
   hasValidSubscription() {
     return this.subscription && 
@@ -433,16 +458,13 @@ class AuthManager {
 
   // 创建支付宝支付订单
   async createAlipayPayment(planId, paymentType = 'web') {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('请先登录');
-    }
+    await this.ensureLoggedIn();
 
     const response = await fetch('/api/payment/alipay/create', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${this.token}`
       },
       body: JSON.stringify({ planId, paymentType })
     });
@@ -458,15 +480,12 @@ class AuthManager {
 
   // 查询支付状态
   async queryPaymentStatus(outTradeNo) {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('请先登录');
-    }
+    await this.ensureLoggedIn();
 
     const response = await fetch(`/api/payment/alipay/query/${outTradeNo}`, {
       method: 'GET',
       headers: {
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${this.token}`
       }
     });
 
@@ -481,15 +500,12 @@ class AuthManager {
 
   // 取消支付订单
   async cancelPayment(outTradeNo) {
-    const token = localStorage.getItem('token');
-    if (!token) {
-      throw new Error('请先登录');
-    }
+    await this.ensureLoggedIn();
 
     const response = await fetch(`/api/payment/alipay/cancel/${outTradeNo}`, {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${token}`
+        'Authorization': `Bearer ${this.token}`
       }
     });
 
@@ -505,6 +521,99 @@ class AuthManager {
   // 检测设备类型
   isMobileDevice() {
     return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+  }
+
+  // ==================== PayPal 支付相关方法 ====================
+
+  // 创建PayPal支付订单
+  async createPaypalPayment(planId, currency = 'USD') {
+    await this.ensureLoggedIn();
+
+    const response = await fetch('/api/payment/paypal/create', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token}`
+      },
+      body: JSON.stringify({ planId, currency })
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || '创建PayPal支付订单失败');
+    }
+  }
+
+  // 查询PayPal支付状态
+  async queryPaypalPaymentStatus(paymentId) {
+    await this.ensureLoggedIn();
+
+    const response = await fetch(`/api/payment/paypal/query/${paymentId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${this.token}`
+      }
+    });
+
+    const data = await response.json();
+
+    if (data.success) {
+      return data.data;
+    } else {
+      throw new Error(data.message || '查询PayPal支付状态失败');
+    }
+  }
+
+  // 获取支付配置状态
+  async getPaymentConfigStatus() {
+    try {
+      const response = await fetch('/api/payment/config/status', {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        return data.data;
+      } else {
+        throw new Error(data.message || '获取支付配置失败');
+      }
+    } catch (error) {
+      console.error('获取支付配置状态失败:', error);
+      
+      // 提供更详细的错误信息
+      let errorMessage = '获取支付配置失败';
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = '网络连接失败，请检查服务器状态';
+      } else if (error.message.includes('获取支付配置失败')) {
+        errorMessage = '支付服务配置错误，请联系管理员';
+      }
+      
+      return {
+        alipay: { 
+          isConfigured: false, 
+          error: '支付宝服务未配置或配置错误',
+          hasAppId: false,
+          hasPrivateKey: false,
+          hasPublicKey: false
+        },
+        paypal: { 
+          isConfigured: false, 
+          error: 'PayPal服务未配置或配置错误',
+          hasClientId: false,
+          hasClientSecret: false,
+          mode: 'sandbox'
+        },
+        supportedMethods: [],
+        message: errorMessage
+      };
+    }
   }
 
   // 认证状态改变回调

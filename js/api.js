@@ -549,9 +549,13 @@ async function handleMultipleCustomSearch(searchQuery, customApiUrls) {
     
     window.fetch = async function(input, init) {
         const requestUrl = typeof input === 'string' ? new URL(input, window.location.origin) : input.url;
+        console.log('Fetch拦截器处理请求:', requestUrl.pathname);
         
-        // 如果是认证或订阅相关的API，直接调用原生fetch，不进行拦截
-        if (requestUrl.pathname.startsWith('/api/auth/') || requestUrl.pathname.startsWith('/api/subscription/')) {
+        // 如果是认证、订阅或支付相关的API，直接调用原生fetch，不进行拦截
+        if (requestUrl.pathname.startsWith('/api/auth/') || 
+            requestUrl.pathname.startsWith('/api/subscription/') || 
+            requestUrl.pathname.startsWith('/api/payment/')) {
+            console.log('直接调用原生fetch，不拦截:', requestUrl.pathname);
             return originalFetch.call(this, input, init);
         }
         
