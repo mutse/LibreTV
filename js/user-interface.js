@@ -1404,7 +1404,7 @@ class UserInterface {
       if (movieCardWall) {
         movieCardWall.style.display = 'block';
         // 刷新卡片墙
-        if (window.movieCardWall) {
+        if (window.movieCardWall && typeof window.movieCardWall.refresh === 'function') {
           window.movieCardWall.refresh();
         }
       }

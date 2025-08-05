@@ -13,14 +13,20 @@ let episodesReversed = false;
 
 // 页面初始化
 document.addEventListener('DOMContentLoaded', function () {
-    // 初始化API复选框
-    initAPICheckboxes();
+    // 初始化API复选框（仅在admin页面）
+    if (document.getElementById('apiCheckboxes')) {
+        initAPICheckboxes();
+    }
 
-    // 初始化自定义API列表
-    renderCustomAPIsList();
+    // 初始化自定义API列表（仅在admin页面）
+    if (document.getElementById('apiCheckboxes')) {
+        renderCustomAPIsList();
+    }
 
-    // 初始化显示选中的API数量
-    updateSelectedApiCount();
+    // 初始化显示选中的API数量（仅在admin页面）
+    if (document.getElementById('apiCheckboxes')) {
+        updateSelectedApiCount();
+    }
 
     // 渲染搜索历史
     renderSearchHistory();
@@ -64,6 +70,10 @@ document.addEventListener('DOMContentLoaded', function () {
 // 初始化API复选框
 function initAPICheckboxes() {
     const container = document.getElementById('apiCheckboxes');
+    if (!container) {
+        console.log('apiCheckboxes element not found, skipping initialization');
+        return;
+    }
     container.innerHTML = '';
 
     // 添加普通API组标题
