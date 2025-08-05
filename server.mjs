@@ -11,6 +11,7 @@ import { ensureSubscriptionPlans } from './ensure-plans.js';
 import authRoutes from './routes/auth.js';
 import subscriptionRoutes from './routes/subscription.js';
 import paymentRoutes from './routes/payment.js';
+import adminRoutes from './routes/admin.js';
 import { authenticateToken, optionalAuth, requireSubscription, authErrorHandler } from './middleware/auth.js';
 import { expireOldSubscriptions } from './models/Subscription.js';
 
@@ -78,12 +79,15 @@ async function renderPage(filePath, password) {
   return content;
 }
 
-app.get(['/', '/index.html', '/player.html'], async (req, res) => {
+app.get(['/', '/index.html', '/player.html', '/admin.html'], async (req, res) => {
   try {
     let filePath;
     switch (req.path) {
       case '/player.html':
         filePath = path.join(__dirname, 'player.html');
+        break;
+      case '/admin.html':
+        filePath = path.join(__dirname, 'admin.html');
         break;
       default: // '/' 和 '/index.html'
         filePath = path.join(__dirname, 'index.html');
@@ -144,6 +148,7 @@ app.use('/proxy', (req, res, next) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/subscription', subscriptionRoutes);
 app.use('/api/payment', paymentRoutes);
+app.use('/api/admin', adminRoutes);
 
 // 受保护的代理路由 - 需要订阅才能访问
 app.get('/proxy/:encodedUrl', optionalAuth, async (req, res, next) => {

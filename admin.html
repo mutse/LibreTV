@@ -1,0 +1,1166 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LibreTV 管理面板</title>
+    <script src="libs/tailwindcss.min.js"></script>
+    <style>
+        .admin-container {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .sidebar {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-right: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .content-area {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(5px);
+        }
+        .card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: all 0.3s ease;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0,0,0,0.2);
+        }
+        .table-row:hover {
+            background: rgba(255, 255, 255, 0.1);
+        }
+        .hidden { display: none; }
+        
+        /* Toggle switch styles */
+        .toggle-bg {
+            transition: background-color 0.3s ease-in-out;
+            background-color: #6b7280; /* 默认灰色背景 */
+        }
+        .toggle-dot {
+            transition: transform 0.3s ease-in-out;
+        }
+        #yellowFilterToggle:checked + .toggle-bg {
+            background-color: #667eea;
+        }
+        #yellowFilterToggle:checked ~ .toggle-dot {
+            transform: translateX(1.5rem);
+        }
+        #yellowFilterToggle:focus + .toggle-bg,
+        #yellowFilterToggle:hover + .toggle-bg {
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+        }
+        #adFilterToggle:checked + .toggle-bg {
+            background-color: #667eea;
+        }
+        #adFilterToggle:checked ~ .toggle-dot {
+            transform: translateX(1.5rem);
+        }
+        #adFilterToggle:focus + .toggle-bg,
+        #adFilterToggle:hover + .toggle-bg {
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+        }
+        #doubanToggle:checked + .toggle-bg {
+            background-color: #667eea;
+        }
+        #doubanToggle:checked ~ .toggle-dot {
+            transform: translateX(1.5rem);
+        }
+        #doubanToggle:focus + .toggle-bg,
+        #doubanToggle:hover + .toggle-bg {
+            box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3);
+        }
+        .filter-disabled .toggle-bg {
+            background-color: #444 !important;
+            opacity: 0.8;
+        }
+        .filter-disabled .toggle-dot {
+            transform: translateX(0) !important;
+            opacity: 0.8;
+        }
+    </style>
+</head>
+<body class="font-sans">
+    <div class="admin-container flex">
+        <!-- Login Modal -->
+        <div id="loginModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div class="card rounded-lg p-8 w-96">
+                <h2 class="text-2xl font-bold text-white mb-6 text-center">管理员登录</h2>
+                <form id="loginForm">
+                    <div class="mb-4">
+                        <label class="block text-white text-sm font-bold mb-2">管理员密码</label>
+                        <input type="password" id="adminPassword" class="w-full px-3 py-2 bg-white bg-opacity-20 text-white placeholder-gray-300 border border-white border-opacity-30 rounded focus:outline-none focus:border-opacity-60" placeholder="请输入管理员密码" required>
+                    </div>
+                    <button type="submit" class="w-full btn-primary text-white font-bold py-3 px-4 rounded">
+                        登录
+                    </button>
+                </form>
+                <div id="loginError" class="text-red-300 text-sm mt-4 hidden"></div>
+            </div>
+        </div>
+
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar w-64 p-6 hidden">
+            <div class="text-white">
+                <h1 class="text-2xl font-bold mb-8">LibreTV 管理</h1>
+                <nav class="space-y-2">
+                    <a href="#" onclick="showSection('dashboard')" class="nav-item block px-4 py-3 text-white hover:bg-white hover:bg-opacity-20 rounded">
+                        📊 仪表板
+                    </a>
+                    <a href="#" onclick="showSection('users')" class="nav-item block px-4 py-3 text-white hover:bg-white hover:bg-opacity-20 rounded">
+                        👥 用户管理
+                    </a>
+                    <a href="#" onclick="showSection('settings')" class="nav-item block px-4 py-3 text-white hover:bg-white hover:bg-opacity-20 rounded">
+                        ⚙️ 系统设置
+                    </a>
+                    <a href="#" onclick="logout()" class="nav-item block px-4 py-3 text-red-300 hover:bg-red-500 hover:bg-opacity-20 rounded">
+                        🚪 退出登录
+                    </a>
+                </nav>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div id="mainContent" class="flex-1 p-6 hidden">
+            <!-- Dashboard Section -->
+            <div id="dashboardSection" class="section">
+                <h2 class="text-3xl font-bold text-white mb-8">仪表板</h2>
+                
+                <!-- Stats Cards -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                    <div class="card rounded-lg p-6">
+                        <div class="flex items-center">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-white">总用户数</h3>
+                                <p id="totalUsers" class="text-2xl font-bold text-white">-</p>
+                            </div>
+                            <div class="text-4xl text-white opacity-60">👥</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card rounded-lg p-6">
+                        <div class="flex items-center">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-white">今日新用户</h3>
+                                <p id="newUsersToday" class="text-2xl font-bold text-white">-</p>
+                            </div>
+                            <div class="text-4xl text-white opacity-60">🆕</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card rounded-lg p-6">
+                        <div class="flex items-center">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-white">活跃订阅</h3>
+                                <p id="activeSubscriptions" class="text-2xl font-bold text-white">-</p>
+                            </div>
+                            <div class="text-4xl text-white opacity-60">✅</div>
+                        </div>
+                    </div>
+                    
+                    <div class="card rounded-lg p-6">
+                        <div class="flex items-center">
+                            <div class="flex-1">
+                                <h3 class="text-lg font-semibold text-white">总收入</h3>
+                                <p id="totalRevenue" class="text-2xl font-bold text-white">-</p>
+                            </div>
+                            <div class="text-4xl text-white opacity-60">💰</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Users Section -->
+            <div id="usersSection" class="section hidden">
+                <div class="flex justify-between items-center mb-8">
+                    <h2 class="text-3xl font-bold text-white">用户管理</h2>
+                    <div class="flex space-x-4">
+                        <input type="text" id="userSearch" placeholder="搜索用户..." class="px-4 py-2 bg-white bg-opacity-20 text-white placeholder-gray-300 border border-white border-opacity-30 rounded focus:outline-none focus:border-opacity-60">
+                        <button onclick="searchUsers()" class="btn-primary text-white px-6 py-2 rounded">搜索</button>
+                    </div>
+                </div>
+
+                <!-- Users Table -->
+                <div class="card rounded-lg overflow-hidden">
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-white">
+                            <thead class="bg-white bg-opacity-10">
+                                <tr>
+                                    <th class="px-6 py-3 text-left">用户ID</th>
+                                    <th class="px-6 py-3 text-left">用户名</th>
+                                    <th class="px-6 py-3 text-left">邮箱</th>
+                                    <th class="px-6 py-3 text-left">订阅状态</th>
+                                    <th class="px-6 py-3 text-left">注册时间</th>
+                                    <th class="px-6 py-3 text-left">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="usersTableBody">
+                                <!-- Dynamic content -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Pagination -->
+                <div class="flex justify-between items-center mt-6">
+                    <div class="text-white" id="paginationInfo">
+                        显示 0 - 0 共 0 用户
+                    </div>
+                    <div class="flex space-x-2" id="paginationControls">
+                        <!-- Dynamic pagination buttons -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Settings Section -->
+            <div id="settingsSection" class="section hidden">
+                <h2 class="text-3xl font-bold text-white mb-8">系统设置</h2>
+                
+                <div class="space-y-6">
+                    <!-- 数据源设置区域 -->
+                    <div class="card p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold text-white mb-4 border-b border-white border-opacity-20 pb-2">数据源设置</h3>
+                        
+                        <!-- 批量操作按钮 -->
+                        <div class="flex space-x-2 mb-4">
+                            <button onclick="selectAllAPIs(true)" class="px-3 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm rounded">全选</button>
+                            <button onclick="selectAllAPIs(false)" class="px-3 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm rounded">全不选</button>
+                            <button onclick="selectAllAPIs(true, true)" class="px-3 py-2 bg-white bg-opacity-20 hover:bg-opacity-30 text-white text-sm rounded">全选普通资源</button>
+                        </div>
+                        
+                        <!-- API选择区域 -->
+                        <div class="max-h-48 overflow-y-auto bg-white bg-opacity-10 p-4 rounded-lg mb-4">
+                            <div id="apiCheckboxes">
+                                <!-- 这里将动态插入API复选框 -->
+                            </div>
+                        </div>
+                        
+                        <!-- API信息显示 -->
+                        <div class="text-sm text-gray-300 flex justify-between items-center">
+                            <span>已选API数量：<span id="selectedApiCount" class="text-white font-semibold">0</span></span>
+                            <span id="siteStatus" class="ml-2"></span>
+                        </div>
+                    </div>
+
+                    <!-- 自定义API管理区域 -->
+                    <div class="card p-6 rounded-lg">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-xl font-semibold text-white border-b border-white border-opacity-20 pb-2 flex-1">自定义API</h3>
+                            <button onclick="showAddCustomApiForm()" class="bg-white bg-opacity-20 hover:bg-opacity-30 text-white w-8 h-8 rounded-full text-center text-lg ml-2">+</button>
+                        </div>
+                        <div id="customApisList" class="max-h-40 overflow-y-auto mb-4">
+                            <!-- 自定义API将显示在这里 -->
+                        </div>
+                        
+                        <!-- 添加自定义API表单 (默认隐藏) -->
+                        <div id="addCustomApiForm" class="hidden mt-4 p-4 bg-white bg-opacity-10 rounded-lg">
+                            <input type="text" id="customApiName" placeholder="API名称" class="w-full bg-white bg-opacity-20 border border-white border-opacity-30 text-white px-3 py-2 rounded mb-3" autocomplete="off">
+                            <input type="text" id="customApiUrl" placeholder="https://abc.com" class="w-full bg-white bg-opacity-20 border border-white border-opacity-30 text-white px-3 py-2 rounded mb-3" autocomplete="off">
+                            <input type="text" id="customApiDetail" placeholder="detail地址（可选）" class="w-full bg-white bg-opacity-20 border border-white border-opacity-30 text-white px-3 py-2 rounded mb-3" autocomplete="off">
+                            <div class="flex items-center mb-3">
+                                <input type="checkbox" id="customApiIsAdult" class="form-checkbox h-4 w-4 text-pink-500">
+                                <label for="customApiIsAdult" class="ml-2 text-sm text-pink-300">黄色资源站</label>
+                            </div>
+                            <div class="flex space-x-2">
+                                <button onclick="addCustomApi()" class="btn-primary text-white px-4 py-2 rounded text-sm">添加</button>
+                                <button onclick="cancelAddCustomApi()" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded text-sm">取消</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- 内容过滤设置区域 -->
+                    <div class="card p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold text-white mb-4 border-b border-white border-opacity-20 pb-2">功能开关</h3>
+                        
+                        <!-- 黄色内容过滤开关 -->
+                        <div class="flex items-center justify-between mb-6 pb-4 border-b border-white border-opacity-10">
+                            <div>
+                                <label class="text-lg font-medium text-white">黄色内容过滤</label>
+                                <p class="text-sm text-gray-300 mt-1">过滤"伦理片"等黄色内容</p>
+                            </div>
+                            <div class="relative inline-block w-12 align-middle select-none">
+                                <input type="checkbox" id="yellowFilterToggle" class="opacity-0 absolute w-full h-full cursor-pointer z-10">
+                                <div class="toggle-bg w-12 h-6 rounded-full transition-colors duration-300 ease-in-out"></div>
+                                <div class="toggle-dot absolute w-5 h-5 bg-white rounded-full top-0.5 left-0.5 transition-transform duration-300 ease-in-out"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- 广告过滤开关 -->
+                        <div class="flex items-center justify-between mb-6 pb-4 border-b border-white border-opacity-10">
+                            <div>
+                                <label class="text-lg font-medium text-white">分片广告过滤</label>
+                                <p class="text-sm text-gray-300 mt-1">关闭可减少旧版浏览器卡顿</p>
+                            </div>
+                            <div class="relative inline-block w-12 align-middle select-none">
+                                <input type="checkbox" id="adFilterToggle" class="opacity-0 absolute w-full h-full cursor-pointer z-10">
+                                <div class="toggle-bg w-12 h-6 rounded-full transition-colors duration-300 ease-in-out"></div>
+                                <div class="toggle-dot absolute w-5 h-5 bg-white rounded-full top-0.5 left-0.5 transition-transform duration-300 ease-in-out"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- 豆瓣热门开关 -->
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <label class="text-lg font-medium text-white">豆瓣热门推荐</label>
+                                <p class="text-sm text-gray-300 mt-1">首页显示豆瓣热门影视内容</p>
+                            </div>
+                            <div class="relative inline-block w-12 align-middle select-none">
+                                <input type="checkbox" id="doubanToggle" class="opacity-0 absolute w-full h-full cursor-pointer z-10">
+                                <div class="toggle-bg w-12 h-6 rounded-full transition-colors duration-300 ease-in-out"></div>
+                                <div class="toggle-dot absolute w-5 h-5 bg-white rounded-full top-0.5 left-0.5 transition-transform duration-300 ease-in-out"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 一般功能区域 -->
+                    <div class="card p-6 rounded-lg">
+                        <h3 class="text-xl font-semibold text-white mb-4 border-b border-white border-opacity-20 pb-2">一般功能</h3>
+                        <div class="space-y-3">
+                            <button onclick="importConfig()" class="w-full btn-primary text-white py-3 px-4 rounded-lg text-sm font-medium">导入配置</button>
+                            <button onclick="exportConfig()" class="w-full btn-primary text-white py-3 px-4 rounded-lg text-sm font-medium">导出配置</button>
+                            <button onclick="clearLocalStorage()" class="w-full btn-primary text-white py-3 px-4 rounded-lg text-sm font-medium">清除Cookie</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- User Detail Modal -->
+    <div id="userDetailModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="card rounded-lg p-8 w-2xl max-h-screen overflow-y-auto">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">用户详情</h2>
+                <button onclick="closeUserDetail()" class="text-white hover:text-gray-300">✕</button>
+            </div>
+            <div id="userDetailContent">
+                <!-- Dynamic user detail content -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Subscription Modal -->
+    <div id="subscriptionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 hidden">
+        <div class="card rounded-lg p-8 w-96">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold text-white">修改订阅</h2>
+                <button onclick="closeSubscriptionModal()" class="text-white hover:text-gray-300">✕</button>
+            </div>
+            <form id="subscriptionForm">
+                <input type="hidden" id="subscriptionUserId">
+                <div class="mb-4">
+                    <label class="block text-white text-sm font-bold mb-2">订阅计划</label>
+                    <select id="subscriptionPlan" class="w-full px-3 py-2 bg-white bg-opacity-20 text-white border border-white border-opacity-30 rounded focus:outline-none focus:border-opacity-60">
+                        <option value="1">月度订阅</option>
+                        <option value="2">年度订阅</option>
+                    </select>
+                </div>
+                <div class="mb-4">
+                    <label class="block text-white text-sm font-bold mb-2">结束日期</label>
+                    <input type="datetime-local" id="subscriptionEndDate" class="w-full px-3 py-2 bg-white bg-opacity-20 text-white border border-white border-opacity-30 rounded focus:outline-none focus:border-opacity-60" required>
+                </div>
+                <div class="flex space-x-4">
+                    <button type="submit" class="flex-1 btn-primary text-white font-bold py-3 px-4 rounded">
+                        更新订阅
+                    </button>
+                    <button type="button" onclick="cancelSubscription()" class="flex-1 bg-red-600 hover:bg-red-700 text-white font-bold py-3 px-4 rounded">
+                        取消订阅
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        let adminToken = localStorage.getItem('adminToken');
+        let currentPage = 1;
+        let currentUserId = null;
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            if (adminToken) {
+                showDashboard();
+            } else {
+                showLogin();
+            }
+        });
+
+        // Login functionality
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const password = document.getElementById('adminPassword').value;
+            
+            try {
+                console.log('Attempting admin login...');
+                const response = await fetch('/api/admin/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ password })
+                });
+
+                console.log('Login response status:', response.status);
+                const data = await response.json();
+                console.log('Login response data:', data);
+                
+                if (data.success) {
+                    adminToken = data.token;
+                    localStorage.setItem('adminToken', adminToken);
+                    console.log('Login successful, showing dashboard');
+                    showDashboard();
+                } else {
+                    console.error('Login failed:', data.error);
+                    showError('loginError', data.error || '登录失败');
+                }
+            } catch (error) {
+                console.error('Login request failed:', error);
+                showError('loginError', '登录请求失败，请检查服务器连接');
+            }
+        });
+
+        function showLogin() {
+            document.getElementById('loginModal').classList.remove('hidden');
+            document.getElementById('sidebar').classList.add('hidden');
+            document.getElementById('mainContent').classList.add('hidden');
+        }
+
+        function showDashboard() {
+            document.getElementById('loginModal').classList.add('hidden');
+            document.getElementById('sidebar').classList.remove('hidden');
+            document.getElementById('mainContent').classList.remove('hidden');
+            showSection('dashboard');
+            loadDashboardStats();
+        }
+
+        function showError(elementId, message) {
+            const errorElement = document.getElementById(elementId);
+            errorElement.textContent = message;
+            errorElement.classList.remove('hidden');
+            setTimeout(() => {
+                errorElement.classList.add('hidden');
+            }, 5000);
+        }
+
+        // Navigation
+        function showSection(section) {
+            // Hide all sections
+            document.querySelectorAll('.section').forEach(s => s.classList.add('hidden'));
+            
+            // Show selected section
+            document.getElementById(section + 'Section').classList.remove('hidden');
+            
+            // Update active nav item
+            document.querySelectorAll('.nav-item').forEach(item => {
+                item.classList.remove('bg-white', 'bg-opacity-20');
+            });
+            
+            if (section === 'users') {
+                loadUsers();
+            } else if (section === 'settings') {
+                loadSettings();
+            }
+        }
+
+        // Dashboard functions
+        async function loadDashboardStats() {
+            try {
+                const response = await fetch('/api/admin/dashboard/stats', {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const stats = await response.json();
+                    document.getElementById('totalUsers').textContent = stats.users.total;
+                    document.getElementById('newUsersToday').textContent = stats.users.newToday;
+                    document.getElementById('activeSubscriptions').textContent = stats.subscriptions.active;
+                    document.getElementById('totalRevenue').textContent = '¥' + (stats.revenue.total || 0);
+                } else if (response.status === 401) {
+                    logout();
+                }
+            } catch (error) {
+                console.error('加载统计数据失败:', error);
+            }
+        }
+
+        // Users functions
+        async function loadUsers(page = 1, search = '') {
+            try {
+                console.log('Loading users, page:', page, 'search:', search);
+                const response = await fetch(`/api/admin/users?page=${page}&limit=20&search=${encodeURIComponent(search)}`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+
+                console.log('Response status:', response.status);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    console.log('Users data received:', data);
+                    renderUsersTable(data.users);
+                    renderPagination(data.pagination);
+                    currentPage = page;
+                } else if (response.status === 401) {
+                    console.log('Unauthorized, logging out');
+                    logout();
+                } else {
+                    const errorData = await response.json();
+                    console.error('Error response:', errorData);
+                    alert('加载用户失败: ' + (errorData.error || '未知错误'));
+                }
+            } catch (error) {
+                console.error('加载用户列表失败:', error);
+                alert('网络错误，请检查服务器连接');
+            }
+        }
+
+        function renderUsersTable(users) {
+            const tbody = document.getElementById('usersTableBody');
+            tbody.innerHTML = users.map(user => `
+                <tr class="table-row border-b border-white border-opacity-10">
+                    <td class="px-6 py-4">${user.id}</td>
+                    <td class="px-6 py-4">${user.username}</td>
+                    <td class="px-6 py-4">${user.email}</td>
+                    <td class="px-6 py-4">
+                        <span class="px-2 py-1 rounded text-xs ${user.subscription_status === 'active' ? 'bg-green-600' : 'bg-red-600'}">
+                            ${user.subscription_status === 'active' ? '有效订阅' : '无订阅'}
+                        </span>
+                    </td>
+                    <td class="px-6 py-4">${new Date(user.created_at).toLocaleDateString('zh-CN')}</td>
+                    <td class="px-6 py-4">
+                        <button onclick="showUserDetail(${user.id})" class="text-blue-300 hover:text-blue-200 mr-2">详情</button>
+                        <button onclick="showSubscriptionModal(${user.id})" class="text-green-300 hover:text-green-200 mr-2">订阅</button>
+                        <button onclick="deleteUser(${user.id})" class="text-red-300 hover:text-red-200">删除</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function renderPagination(pagination) {
+            const info = document.getElementById('paginationInfo');
+            const controls = document.getElementById('paginationControls');
+            
+            const start = (pagination.current - 1) * pagination.limit + 1;
+            const end = Math.min(pagination.current * pagination.limit, pagination.totalUsers);
+            info.textContent = `显示 ${start} - ${end} 共 ${pagination.totalUsers} 用户`;
+            
+            let paginationHTML = '';
+            
+            // Previous button
+            if (pagination.current > 1) {
+                paginationHTML += `<button onclick="loadUsers(${pagination.current - 1})" class="px-3 py-1 bg-white bg-opacity-20 text-white rounded hover:bg-opacity-30">上一页</button>`;
+            }
+            
+            // Page numbers
+            for (let i = Math.max(1, pagination.current - 2); i <= Math.min(pagination.total, pagination.current + 2); i++) {
+                const isActive = i === pagination.current;
+                paginationHTML += `<button onclick="loadUsers(${i})" class="px-3 py-1 ${isActive ? 'bg-blue-600' : 'bg-white bg-opacity-20'} text-white rounded hover:bg-opacity-30">${i}</button>`;
+            }
+            
+            // Next button
+            if (pagination.current < pagination.total) {
+                paginationHTML += `<button onclick="loadUsers(${pagination.current + 1})" class="px-3 py-1 bg-white bg-opacity-20 text-white rounded hover:bg-opacity-30">下一页</button>`;
+            }
+            
+            controls.innerHTML = paginationHTML;
+        }
+
+        function searchUsers() {
+            const search = document.getElementById('userSearch').value;
+            loadUsers(1, search);
+        }
+
+        // User detail functions
+        async function showUserDetail(userId) {
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    renderUserDetail(data.user, data.subscriptionHistory);
+                    document.getElementById('userDetailModal').classList.remove('hidden');
+                } else if (response.status === 401) {
+                    logout();
+                }
+            } catch (error) {
+                console.error('获取用户详情失败:', error);
+            }
+        }
+
+        function renderUserDetail(user, subscriptionHistory) {
+            const content = document.getElementById('userDetailContent');
+            content.innerHTML = `
+                <div class="space-y-6">
+                    <div>
+                        <h3 class="text-lg font-semibold text-white mb-4">基本信息</h3>
+                        <div class="grid grid-cols-2 gap-4 text-white">
+                            <div><strong>用户ID:</strong> ${user.id}</div>
+                            <div><strong>用户名:</strong> ${user.username}</div>
+                            <div><strong>邮箱:</strong> ${user.email}</div>
+                            <div><strong>注册时间:</strong> ${new Date(user.created_at).toLocaleString('zh-CN')}</div>
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-semibold text-white mb-4">当前订阅</h3>
+                        <div class="text-white">
+                            ${user.plan_name ? `
+                                <div class="grid grid-cols-2 gap-4">
+                                    <div><strong>计划:</strong> ${user.plan_name}</div>
+                                    <div><strong>价格:</strong> ¥${user.price}</div>
+                                    <div><strong>开始时间:</strong> ${new Date(user.subscription_start).toLocaleString('zh-CN')}</div>
+                                    <div><strong>结束时间:</strong> ${new Date(user.subscription_end).toLocaleString('zh-CN')}</div>
+                                </div>
+                            ` : '<p>无活跃订阅</p>'}
+                        </div>
+                    </div>
+                    
+                    <div>
+                        <h3 class="text-lg font-semibold text-white mb-4">订阅历史</h3>
+                        <div class="max-h-40 overflow-y-auto">
+                            ${subscriptionHistory.length > 0 ? `
+                                <table class="w-full text-white text-sm">
+                                    <thead>
+                                        <tr class="border-b border-white border-opacity-20">
+                                            <th class="text-left py-2">计划</th>
+                                            <th class="text-left py-2">状态</th>
+                                            <th class="text-left py-2">开始时间</th>
+                                            <th class="text-left py-2">结束时间</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        ${subscriptionHistory.map(sub => `
+                                            <tr class="border-b border-white border-opacity-10">
+                                                <td class="py-2">${sub.plan_name}</td>
+                                                <td class="py-2">
+                                                    <span class="px-2 py-1 rounded text-xs ${sub.status === 'active' ? 'bg-green-600' : 'bg-red-600'}">
+                                                        ${sub.status}
+                                                    </span>
+                                                </td>
+                                                <td class="py-2">${new Date(sub.start_date).toLocaleDateString('zh-CN')}</td>
+                                                <td class="py-2">${new Date(sub.end_date).toLocaleDateString('zh-CN')}</td>
+                                            </tr>
+                                        `).join('')}
+                                    </tbody>
+                                </table>
+                            ` : '<p>无订阅历史</p>'}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function closeUserDetail() {
+            document.getElementById('userDetailModal').classList.add('hidden');
+        }
+
+        // Subscription functions
+        function showSubscriptionModal(userId) {
+            currentUserId = userId;
+            document.getElementById('subscriptionUserId').value = userId;
+            document.getElementById('subscriptionModal').classList.remove('hidden');
+            
+            // Set default end date to 1 month from now
+            const nextMonth = new Date();
+            nextMonth.setMonth(nextMonth.getMonth() + 1);
+            document.getElementById('subscriptionEndDate').value = nextMonth.toISOString().slice(0, 16);
+        }
+
+        function closeSubscriptionModal() {
+            document.getElementById('subscriptionModal').classList.add('hidden');
+            currentUserId = null;
+        }
+
+        document.getElementById('subscriptionForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const planId = document.getElementById('subscriptionPlan').value;
+            const endDate = document.getElementById('subscriptionEndDate').value;
+            
+            try {
+                const response = await fetch(`/api/admin/users/${currentUserId}/subscription`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${adminToken}`
+                    },
+                    body: JSON.stringify({
+                        planId,
+                        endDate: new Date(endDate).toISOString()
+                    })
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    closeSubscriptionModal();
+                    loadUsers(currentPage);
+                    alert('订阅更新成功');
+                } else {
+                    alert(data.error || '更新失败');
+                }
+            } catch (error) {
+                alert('更新订阅失败');
+            }
+        });
+
+        async function cancelSubscription() {
+            if (!confirm('确定要取消用户的订阅吗？')) return;
+            
+            try {
+                const response = await fetch(`/api/admin/users/${currentUserId}/subscription`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    closeSubscriptionModal();
+                    loadUsers(currentPage);
+                    alert('订阅已取消');
+                } else {
+                    alert(data.error || '取消失败');
+                }
+            } catch (error) {
+                alert('取消订阅失败');
+            }
+        }
+
+        async function deleteUser(userId) {
+            if (!confirm('确定要删除这个用户吗？此操作不可恢复。')) return;
+            
+            try {
+                const response = await fetch(`/api/admin/users/${userId}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+
+                const data = await response.json();
+                
+                if (data.success) {
+                    loadUsers(currentPage);
+                    alert('用户已删除');
+                } else {
+                    alert(data.error || '删除失败');
+                }
+            } catch (error) {
+                alert('删除用户失败');
+            }
+        }
+
+        // Logout
+        async function logout() {
+            try {
+                await fetch('/api/admin/logout', {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${adminToken}`
+                    }
+                });
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+            
+            localStorage.removeItem('adminToken');
+            adminToken = null;
+            showLogin();
+        }
+
+        // Enter key search
+        document.getElementById('userSearch').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchUsers();
+            }
+        });
+
+        // Settings functions
+        function loadSettings() {
+            // 初始化API复选框
+            initAPICheckboxes();
+            
+            // 初始化自定义API列表
+            renderCustomAPIsList();
+            
+            // 初始化显示选中的API数量
+            updateSelectedApiCount();
+            
+            // 设置过滤器开关状态
+            setupSettingsToggles();
+        }
+
+        // 初始化设置页面的开关状态
+        function setupSettingsToggles() {
+            // 黄色内容过滤开关
+            const yellowFilterToggle = document.getElementById('yellowFilterToggle');
+            if (yellowFilterToggle) {
+                const isYellowFilterEnabled = localStorage.getItem('yellowFilterEnabled') === 'true';
+                yellowFilterToggle.checked = isYellowFilterEnabled;
+                
+                // 设置初始视觉状态
+                const yellowToggleBg = yellowFilterToggle.nextElementSibling;
+                const yellowToggleDot = yellowToggleBg.nextElementSibling;
+                if (isYellowFilterEnabled) {
+                    yellowToggleBg.style.backgroundColor = '#667eea';
+                    yellowToggleDot.style.transform = 'translateX(1.5rem)';
+                } else {
+                    yellowToggleBg.style.backgroundColor = '#6b7280';
+                    yellowToggleDot.style.transform = 'translateX(0)';
+                }
+                
+                yellowFilterToggle.addEventListener('change', function() {
+                    const isChecked = this.checked;
+                    localStorage.setItem('yellowFilterEnabled', isChecked ? 'true' : 'false');
+                    
+                    // 更新视觉状态
+                    if (isChecked) {
+                        yellowToggleBg.style.backgroundColor = '#667eea';
+                        yellowToggleDot.style.transform = 'translateX(1.5rem)';
+                    } else {
+                        yellowToggleBg.style.backgroundColor = '#6b7280';
+                        yellowToggleDot.style.transform = 'translateX(0)';
+                    }
+                    
+                    // 重新初始化API复选框以显示/隐藏成人内容
+                    initAPICheckboxes();
+                });
+            }
+
+            // 广告过滤开关
+            const adFilterToggle = document.getElementById('adFilterToggle');
+            if (adFilterToggle) {
+                const isAdFilterEnabled = localStorage.getItem('adFilteringEnabled') !== 'false';
+                adFilterToggle.checked = isAdFilterEnabled;
+                
+                // 设置初始视觉状态
+                const adToggleBg = adFilterToggle.nextElementSibling;
+                const adToggleDot = adToggleBg.nextElementSibling;
+                if (isAdFilterEnabled) {
+                    adToggleBg.style.backgroundColor = '#667eea';
+                    adToggleDot.style.transform = 'translateX(1.5rem)';
+                } else {
+                    adToggleBg.style.backgroundColor = '#6b7280';
+                    adToggleDot.style.transform = 'translateX(0)';
+                }
+                
+                adFilterToggle.addEventListener('change', function() {
+                    const isChecked = this.checked;
+                    localStorage.setItem('adFilteringEnabled', isChecked ? 'true' : 'false');
+                    
+                    // 更新视觉状态
+                    if (isChecked) {
+                        adToggleBg.style.backgroundColor = '#667eea';
+                        adToggleDot.style.transform = 'translateX(1.5rem)';
+                    } else {
+                        adToggleBg.style.backgroundColor = '#6b7280';
+                        adToggleDot.style.transform = 'translateX(0)';
+                    }
+                });
+            }
+
+            // 豆瓣热门开关
+            const doubanToggle = document.getElementById('doubanToggle');
+            if (doubanToggle) {
+                const isDoubanEnabled = localStorage.getItem('doubanEnabled') === 'true';
+                doubanToggle.checked = isDoubanEnabled;
+                
+                // 设置初始视觉状态
+                const doubanToggleBg = doubanToggle.nextElementSibling;
+                const doubanToggleDot = doubanToggleBg.nextElementSibling;
+                if (isDoubanEnabled) {
+                    doubanToggleBg.style.backgroundColor = '#667eea';
+                    doubanToggleDot.style.transform = 'translateX(1.5rem)';
+                } else {
+                    doubanToggleBg.style.backgroundColor = '#6b7280';
+                    doubanToggleDot.style.transform = 'translateX(0)';
+                }
+                
+                doubanToggle.addEventListener('change', function() {
+                    const isChecked = this.checked;
+                    localStorage.setItem('doubanEnabled', isChecked ? 'true' : 'false');
+                    
+                    // 更新视觉状态
+                    if (isChecked) {
+                        doubanToggleBg.style.backgroundColor = '#667eea';
+                        doubanToggleDot.style.transform = 'translateX(1.5rem)';
+                    } else {
+                        doubanToggleBg.style.backgroundColor = '#6b7280';
+                        doubanToggleDot.style.transform = 'translateX(0)';
+                    }
+                });
+            }
+        }
+
+        // 简化的API站点配置
+        const API_SITES = {
+            tyyszy: { name: "天翼云", url: "https://tyyszy.com/", adult: false },
+            bfzy: { name: "暴风", url: "https://bfyszy.com/", adult: false },
+            dyttzy: { name: "电影天堂", url: "https://www.dy6080.tv/", adult: false },
+            ruyi: { name: "如意", url: "https://www.ruyizy.com/", adult: false }
+        };
+
+        // 初始化API复选框
+        function initAPICheckboxes() {
+            const container = document.getElementById('apiCheckboxes');
+            if (!container) return;
+            
+            container.innerHTML = '';
+
+            // 获取已选择的API
+            let selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '["tyyszy","dyttzy", "bfzy", "ruyi"]');
+
+            // 创建普通API源的复选框
+            Object.keys(API_SITES).forEach(apiKey => {
+                const api = API_SITES[apiKey];
+                if (api.adult) return; // 暂时跳过成人内容
+
+                const checked = selectedAPIs.includes(apiKey);
+
+                const checkbox = document.createElement('div');
+                checkbox.className = 'flex items-center mb-2';
+                checkbox.innerHTML = `
+                    <input type="checkbox" id="api_${apiKey}" 
+                           class="form-checkbox h-4 w-4 text-blue-500" 
+                           ${checked ? 'checked' : ''} 
+                           data-api="${apiKey}">
+                    <label for="api_${apiKey}" class="ml-2 text-sm text-white">${api.name}</label>
+                `;
+                container.appendChild(checkbox);
+
+                // 添加事件监听器
+                checkbox.querySelector('input').addEventListener('change', function() {
+                    updateSelectedAPIs();
+                });
+            });
+        }
+
+        // 更新选中的API列表
+        function updateSelectedAPIs() {
+            const checkboxes = document.querySelectorAll('#apiCheckboxes input[type="checkbox"]');
+            const selected = [];
+            
+            checkboxes.forEach(checkbox => {
+                if (checkbox.checked) {
+                    selected.push(checkbox.dataset.api);
+                }
+            });
+            
+            localStorage.setItem('selectedAPIs', JSON.stringify(selected));
+            updateSelectedApiCount();
+        }
+
+        // 更新选中API数量显示
+        function updateSelectedApiCount() {
+            const selectedAPIs = JSON.parse(localStorage.getItem('selectedAPIs') || '[]');
+            const countElement = document.getElementById('selectedApiCount');
+            if (countElement) {
+                countElement.textContent = selectedAPIs.length;
+            }
+        }
+
+        // 全选/全不选API
+        function selectAllAPIs(selectAll = true, excludeAdult = false) {
+            const checkboxes = document.querySelectorAll('#apiCheckboxes input[type="checkbox"]');
+            
+            checkboxes.forEach(checkbox => {
+                checkbox.checked = selectAll;
+            });
+            
+            updateSelectedAPIs();
+        }
+
+        // 渲染自定义API列表
+        function renderCustomAPIsList() {
+            const container = document.getElementById('customApisList');
+            if (!container) return;
+
+            const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]');
+            
+            if (customAPIs.length === 0) {
+                container.innerHTML = '<div class="text-gray-400 text-sm text-center py-4">暂无自定义API</div>';
+                return;
+            }
+
+            container.innerHTML = customAPIs.map((api, index) => `
+                <div class="flex items-center justify-between p-2 bg-white bg-opacity-5 rounded mb-2">
+                    <div class="flex items-center">
+                        <input type="checkbox" id="custom_api_${index}" 
+                               class="form-checkbox h-4 w-4 text-blue-500 ${api.isAdult ? 'api-adult' : ''}" 
+                               ${api.selected ? 'checked' : ''}>
+                        <label for="custom_api_${index}" class="ml-2 text-sm ${api.isAdult ? 'text-pink-300' : 'text-white'}">
+                            ${api.name}
+                        </label>
+                    </div>
+                    <button onclick="removeCustomApi(${index})" class="text-red-400 hover:text-red-300 text-sm">删除</button>
+                </div>
+            `).join('');
+
+            // 添加事件监听器
+            customAPIs.forEach((api, index) => {
+                const checkbox = document.getElementById(`custom_api_${index}`);
+                if (checkbox) {
+                    checkbox.addEventListener('change', function() {
+                        customAPIs[index].selected = this.checked;
+                        localStorage.setItem('customAPIs', JSON.stringify(customAPIs));
+                        updateSelectedApiCount();
+                    });
+                }
+            });
+        }
+
+        // 显示添加自定义API表单
+        function showAddCustomApiForm() {
+            const form = document.getElementById('addCustomApiForm');
+            if (form) {
+                form.classList.remove('hidden');
+            }
+        }
+
+        // 取消添加自定义API
+        function cancelAddCustomApi() {
+            const form = document.getElementById('addCustomApiForm');
+            if (form) {
+                form.classList.add('hidden');
+                // 清空表单
+                document.getElementById('customApiName').value = '';
+                document.getElementById('customApiUrl').value = '';
+                document.getElementById('customApiDetail').value = '';
+                document.getElementById('customApiIsAdult').checked = false;
+            }
+        }
+
+        // 添加自定义API
+        function addCustomApi() {
+            const name = document.getElementById('customApiName').value.trim();
+            const url = document.getElementById('customApiUrl').value.trim();
+            const detail = document.getElementById('customApiDetail').value.trim();
+            const isAdult = document.getElementById('customApiIsAdult').checked;
+
+            if (!name || !url) {
+                alert('请填写API名称和URL');
+                return;
+            }
+
+            const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]');
+            
+            // 检查是否已存在
+            if (customAPIs.some(api => api.name === name || api.url === url)) {
+                alert('该API已存在');
+                return;
+            }
+
+            customAPIs.push({
+                name,
+                url,
+                detail: detail || url,
+                isAdult,
+                selected: true
+            });
+
+            localStorage.setItem('customAPIs', JSON.stringify(customAPIs));
+            renderCustomAPIsList();
+            cancelAddCustomApi();
+            updateSelectedApiCount();
+        }
+
+        // 删除自定义API
+        function removeCustomApi(index) {
+            if (!confirm('确定要删除这个自定义API吗？')) return;
+
+            const customAPIs = JSON.parse(localStorage.getItem('customAPIs') || '[]');
+            customAPIs.splice(index, 1);
+            localStorage.setItem('customAPIs', JSON.stringify(customAPIs));
+            renderCustomAPIsList();
+            updateSelectedApiCount();
+        }
+
+        // 导入配置
+        function importConfig() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = function(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    try {
+                        const config = JSON.parse(e.target.result);
+                        
+                        // 验证配置格式
+                        if (config.selectedAPIs) {
+                            localStorage.setItem('selectedAPIs', JSON.stringify(config.selectedAPIs));
+                        }
+                        if (config.customAPIs) {
+                            localStorage.setItem('customAPIs', JSON.stringify(config.customAPIs));
+                        }
+                        if (config.yellowFilterEnabled !== undefined) {
+                            localStorage.setItem('yellowFilterEnabled', config.yellowFilterEnabled.toString());
+                        }
+                        if (config.adFilteringEnabled !== undefined) {
+                            localStorage.setItem('adFilteringEnabled', config.adFilteringEnabled.toString());
+                        }
+                        if (config.doubanEnabled !== undefined) {
+                            localStorage.setItem('doubanEnabled', config.doubanEnabled.toString());
+                        }
+
+                        alert('配置导入成功！');
+                        loadSettings(); // 重新加载设置
+                    } catch (err) {
+                        console.error('导入配置失败:', err);
+                        alert('配置文件格式错误');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // 导出配置
+        function exportConfig() {
+            const config = {
+                selectedAPIs: JSON.parse(localStorage.getItem('selectedAPIs') || '[]'),
+                customAPIs: JSON.parse(localStorage.getItem('customAPIs') || '[]'),
+                yellowFilterEnabled: localStorage.getItem('yellowFilterEnabled') === 'true',
+                adFilteringEnabled: localStorage.getItem('adFilteringEnabled') !== 'false',
+                doubanEnabled: localStorage.getItem('doubanEnabled') === 'true',
+                exportTime: new Date().toISOString()
+            };
+
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `libretv-config-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // 清除localStorage
+        function clearLocalStorage() {
+            if (!confirm('确定要清除所有缓存数据吗？这将删除所有设置和历史记录。')) return;
+            
+            localStorage.clear();
+            alert('缓存已清除');
+            loadSettings(); // 重新加载设置
+        }
+    </script>
+</body>
+</html>

@@ -346,9 +346,6 @@ class UserInterface {
                 <p class="text-yellow-700 text-sm">
                   ${paymentConfig.message || '支付服务正在维护中，请稍后再试'}
                 </p>
-                ${paymentConfig.alipay && paymentConfig.alipay.error ? `
-                  <p class="text-yellow-600 text-xs mt-1">支付宝: ${paymentConfig.alipay.error}</p>
-                ` : ''}
                 ${paymentConfig.paypal && paymentConfig.paypal.error ? `
                   <p class="text-yellow-600 text-xs mt-1">PayPal: ${paymentConfig.paypal.error}</p>
                 ` : ''}
@@ -395,15 +392,6 @@ class UserInterface {
                   ${hasValid ? '' : `
                     <div class="space-y-2">
                       ${hasPaymentMethods ? `
-                        ${paymentConfig.supportedMethods.includes('alipay') ? `
-                          <button onclick="userInterface.handleAlipayPayment(${plan.id})" 
-                                  class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
-                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                            </svg>
-                            <span>支付宝支付</span>
-                          </button>
-                        ` : ''}
                         ${paymentConfig.supportedMethods.includes('paypal') || true ? `
                           <button onclick="console.log('PayPal按钮点击'); userInterface.handlePaypalPayment(${plan.id})" 
                                   class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
@@ -429,15 +417,6 @@ class UserInterface {
                   ${hasValid ? `
                     <div class="space-y-2">
                       ${hasPaymentMethods ? `
-                        ${paymentConfig.supportedMethods.includes('alipay') ? `
-                          <button onclick="userInterface.handleAlipayPayment(${plan.id}, true)" 
-                                  class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
-                            <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                            </svg>
-                            <span>支付宝续费</span>
-                          </button>
-                        ` : ''}
                         ${paymentConfig.supportedMethods.includes('paypal') || true ? `
                           <button onclick="console.log('PayPal续费按钮点击'); userInterface.handlePaypalPayment(${plan.id}, true)" 
                                   class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
@@ -533,7 +512,7 @@ class UserInterface {
                   <ul class="text-gray-600 text-sm space-y-1">
                     <li>✓ 月度订阅 ¥9.9/月</li>
                     <li>✓ 年度订阅 ¥99.9/年（更优惠）</li>
-                    <li>✓ 支付宝安全支付</li>
+                    <li>✓ PayPal安全支付</li>
                   </ul>
                 </div>
               </div>
@@ -671,14 +650,6 @@ class UserInterface {
             </div>
             
             <div class="space-y-3">
-              <button onclick="userInterface.handleAlipayPayment(${planId})" 
-                      class="w-full px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 flex items-center justify-center space-x-2">
-                <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                </svg>
-                <span>支付宝支付</span>
-              </button>
-              
               <button onclick="userInterface.handlePaypalPayment(${planId})" 
                       class="w-full px-4 py-2 bg-yellow-500 text-white rounded-md hover:bg-yellow-600 flex items-center justify-center space-x-2">
                 <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
@@ -1365,6 +1336,21 @@ class UserInterface {
       }
     });
 
+    // 恢复header中被隐藏的元素
+    const headers = document.querySelectorAll('header, .container > header');
+    headers.forEach(h => {
+      h.style.display = '';
+      // 恢复标语的显示
+      const taglineElements = h.querySelectorAll('p.text-gray-400');
+      taglineElements.forEach(el => el.style.display = '');
+    });
+
+    // 隐藏影片卡片墙
+    const movieCardWall = document.getElementById('movieCardWall');
+    if (movieCardWall) {
+      movieCardWall.style.display = 'none';
+    }
+
     // 删除递归调用，防止栈溢出
     // this.updateUI();
   }
@@ -1394,9 +1380,15 @@ class UserInterface {
     const historyPanel = document.getElementById('historyPanel');
     if (historyPanel) historyPanel.style.display = 'none';
     
-    // LOGO和header
+    // 保留LibreTV Logo，但隐藏标语
     const headers = document.querySelectorAll('header, .container > header');
-    headers.forEach(h => h.style.display = 'none');
+    headers.forEach(h => {
+      // 保持header可见
+      h.style.display = '';
+      // 只隐藏标语（"自由观影，畅享精彩"），保留logo
+      const taglineElements = h.querySelectorAll('p.text-gray-400');
+      taglineElements.forEach(el => el.style.display = 'none');
+    });
     
     // 搜索/推荐/结果区
     const searchArea = document.getElementById('searchArea');
@@ -1405,6 +1397,18 @@ class UserInterface {
     if (searchArea) searchArea.style.display = 'none';
     if (doubanArea) doubanArea.style.display = 'none';
     if (resultsArea) resultsArea.style.display = 'none';
+
+    // 显示影片卡片墙（仅对未登录用户）
+    if (!isLoggedIn) {
+      const movieCardWall = document.getElementById('movieCardWall');
+      if (movieCardWall) {
+        movieCardWall.style.display = 'block';
+        // 刷新卡片墙
+        if (window.movieCardWall) {
+          window.movieCardWall.refresh();
+        }
+      }
+    }
   }
 
   // 显示通知
