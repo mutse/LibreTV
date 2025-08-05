@@ -255,10 +255,10 @@ app.use((req, res) => {
 });
 
 // 初始化数据库和启动服务器
-async function startServer() {
+async function startServer(env = null) {
   try {
     console.log('正在初始化数据库...');
-    await initDatabase();
+    await initDatabase(env);
     await initTables();
     console.log('数据库初始化完成');
     
@@ -267,38 +267,110 @@ async function startServer() {
     await ensureSubscriptionPlans();
     console.log('订阅计划数据确保完成');
 
-    // 设置定期清理过期订阅的任务
-    setInterval(async () => {
-      try {
-        const expiredCount = await expireOldSubscriptions();
-        if (expiredCount > 0) {
-          console.log(`已处理 ${expiredCount} 个过期订阅`);
+    // 设置定期清理过期订阅的任务（仅在非 Workers 环境）
+    const isCloudflareWorkers = typeof globalThis !== 'undefined' && 
+      globalThis.Request && 
+      globalThis.Response && 
+      globalThis.fetch;
+    
+    if (!isCloudflareWorkers) {
+      setInterval(async () => {
+        try {
+          const expiredCount = await expireOldSubscriptions();
+          if (expiredCount > 0) {
+            console.log(`已处理 ${expiredCount} 个过期订阅`);
+          }
+        } catch (error) {
+          console.error('清理过期订阅失败:', error);
         }
-      } catch (error) {
-        console.error('清理过期订阅失败:', error);
-      }
-    }, 60 * 60 * 1000); // 每小时执行一次
+      }, 60 * 60 * 1000); // 每小时执行一次
 
-    // 启动服务器
-    app.listen(config.port, () => {
-      console.log(`服务器运行在 http://localhost:${config.port}`);
-      if (config.password !== '') {
-        console.log('用户登录密码已设置');
-      }
-      if (config.adminpassword !== '') {
-        console.log('管理员登录密码已设置');
-      }
-      console.log('用户认证和订阅系统已启用');
-      if (config.debug) {
-        console.log('调试模式已启用');
-        console.log('配置:', { ...config, password: config.password ? '******' : '', adminpassword: config.adminpassword? '******' : '' });
-      }
-    });
+      // 启动服务器（仅在非 Workers 环境）
+      app.listen(config.port, () => {
+        console.log(`服务器运行在 http://localhost:${config.port}`);
+        if (config.password !== '') {
+          console.log('用户登录密码已设置');
+        }
+        if (config.adminpassword !== '') {
+          console.log('管理员登录密码已设置');
+        }
+        console.log('用户认证和订阅系统已启用');
+        if (config.debug) {
+          console.log('调试模式已启用');
+          console.log('配置:', { ...config, password: config.password ? '******' : '', adminpassword: config.adminpassword? '******' : '' });
+        }
+      });
+    }
   } catch (error) {
     console.error('服务器启动失败:', error);
-    process.exit(1);
+    if (typeof process !== 'undefined' && process.exit) {
+      process.exit(1);
+    } else {
+      throw error;
+    }
   }
 }
 
-// 启动服务器
-startServer();
+// 启动服务器（本地开发）
+if (typeof globalThis === 'undefined' || !globalThis.Request) {
+  startServer();
+}
+
+// Cloudflare Workers 导出
+export default {
+  async fetch(request, env, ctx) {
+    // 初始化数据库连接（传入 env 参数）
+    if (!db) {
+      await startServer(env);
+    }
+    
+    // 将 express app 转换为 Workers 兼容的处理器
+    return new Promise((resolve) => {
+      const req = {
+        method: request.method,
+        url: request.url,
+        headers: Object.fromEntries(request.headers.entries()),
+        body: request.body
+      };
+      
+      const res = {
+        status: 200,
+        headers: {},
+        body: '',
+        status(code) {
+          this.status = code;
+          return this;
+        },
+        setHeader(name, value) {
+          this.headers[name] = value;
+          return this;
+        },
+        json(data) {
+          this.headers['content-type'] = 'application/json';
+          this.body = JSON.stringify(data);
+          resolve(new Response(this.body, {
+            status: this.status,
+            headers: this.headers
+          }));
+        },
+        send(data) {
+          this.body = data;
+          resolve(new Response(this.body, {
+            status: this.status,
+            headers: this.headers
+          }));
+        }
+      };
+      
+      // 这里需要更复杂的 Express 到 Workers 的适配器
+      // 简化版本，实际使用时建议使用专门的适配器库
+      try {
+        app(req, res);
+      } catch (error) {
+        resolve(new Response('Internal Server Error', {
+          status: 500
+        }));
+      }
+    });
+  }
+};
